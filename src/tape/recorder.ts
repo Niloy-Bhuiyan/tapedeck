@@ -66,15 +66,6 @@ export class TapeRecorder {
     return event as Extract<TapeEvent, { type: E['type'] }>;
   }
 
-  /** Milliseconds elapsed since `start`, measured on the recorder's clock. */
-  elapsedSince(start: number): number {
-    return this.now() - start;
-  }
-
-  clockNow(): number {
-    return this.now();
-  }
-
   toTape(options: { name?: string; metadata?: TapeMetadata; outcome?: TapeOutcome } = {}): Tape {
     const tape: Tape = {
       format: TAPE_FORMAT,
