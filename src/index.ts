@@ -47,6 +47,8 @@ export { MockAnthropic, echoMessageResponder, type MockMessage, type MockMessage
 export type { MockReply, MockResponder, MockToolCall } from './mock/reply.js';
 
 export { formatDiff, formatTimeline, type FormatOptions } from './format/text.js';
+export { renderDiffReport, renderTapeReport } from './report/html.js';
+export type { ReportData } from './report/data.js';
 export { VERSION } from './version.js';
 
 // When launched by `tapedeck record` / `tapedeck replay --against`, bind
