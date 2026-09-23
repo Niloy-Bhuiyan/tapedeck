@@ -45,8 +45,10 @@ export const webSearch = tool('web_search', async ({ query }: { query: string })
  * small recursive-descent parser, so no `eval` is involved.
  */
 export function evaluate(expression: string): number {
-  const tokens = expression.match(/\d+(?:\.\d+)?|[-+*/()]/g) ?? [];
-  if (tokens.join('') !== expression.replace(/[\s,_]/g, '')) throw new Error(`Invalid expression: ${expression}`);
+  // Numbers may use thousands separators ("14,094,034"); anything else unknown is an error.
+  const tokens = expression.match(/\d[\d,]*(?:\.\d+)?|[-+*/()]|\S/g) ?? [];
+  const bad = tokens.find((t) => !/^(\d[\d,]*(\.\d+)?|[-+*/()])$/.test(t));
+  if (bad) throw new Error(`Invalid character "${bad}" in expression: ${expression}`);
   let pos = 0;
   const peek = () => tokens[pos];
   const next = () => tokens[pos++];
@@ -60,7 +62,7 @@ export function evaluate(expression: string): number {
     }
     if (token === '-') return -primary();
     if (token === undefined || !/^\d/.test(token)) throw new Error(`Unexpected ${token ?? 'end of input'}`);
-    return Number(token);
+    return Number(token.replace(/,/g, ''));
   };
   const product = (): number => {
     let value = primary();
