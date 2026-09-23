@@ -15,7 +15,7 @@ import type {
 import { defaultMetadata } from '../version.js';
 import { realNow, type LlmRequest, type Session } from './context.js';
 import { executeLlm, executeTool } from './record-session.js';
-import { streamOf } from './stream.js';
+import { sdkCodec, valueCodec, type LlmCodec, type ToolCodec } from './codec.js';
 
 export type ReplayMode = 'strict' | 'diff';
 
@@ -119,7 +119,7 @@ export class ReplaySession implements Session {
     return value;
   }
 
-  async llm(call: LlmRequest, invoke: () => Promise<unknown>): Promise<unknown> {
+  async llm(call: LlmRequest, invoke: () => Promise<unknown>, codec: LlmCodec = sdkCodec): Promise<unknown> {
     const request = toJson(call.request);
     const actual = this.recorder.append({
       type: 'llm_call',
@@ -133,7 +133,7 @@ export class ReplaySession implements Session {
 
     if (!expected || (expected.response === undefined && !expected.error)) {
       this.unexpected(`${label} (seq ${actual.seq}) has no recorded counterpart on the tape`, actual.seq);
-      return executeLlm(actual, call, invoke);
+      return executeLlm(actual, call, invoke, codec);
     }
 
     const changes = deepDiff(
@@ -147,22 +147,28 @@ export class ReplaySession implements Session {
         expectedId: expected.id,
         actualSeq: actual.seq,
       });
-      if (this.passthrough) return executeLlm(actual, call, invoke);
+      if (this.passthrough) return executeLlm(actual, call, invoke, codec);
     }
 
     if (expected.error) {
       actual.error = expected.error;
       throw deserializeError(expected.error);
     }
-    actual.response = clone(expected.response);
-    if (expected.stream) {
-      actual.stream = true;
-      return streamOf(clone(expected.response) as Json[]);
-    }
-    return clone(expected.response);
+    const captured = {
+      response: clone(expected.response) as Json,
+      ...(expected.stream ? { stream: true } : {}),
+      ...(expected.http ? { http: expected.http } : {}),
+    };
+    Object.assign(actual, captured);
+    return codec.revive(captured);
   }
 
-  async tool(name: string, args: unknown, invoke: () => Promise<unknown>): Promise<unknown> {
+  async tool(
+    name: string,
+    args: unknown,
+    invoke: () => Promise<unknown>,
+    codec: ToolCodec = valueCodec,
+  ): Promise<unknown> {
     const jsonArgs = toJson(args);
     const call = this.recorder.append({ type: 'tool_call', tool: name, callId: '', args: jsonArgs });
     call.callId = call.id;
@@ -172,7 +178,7 @@ export class ReplaySession implements Session {
 
     if (!expected || !recorded) {
       this.unexpected(`${label} (seq ${call.seq}) has no recorded counterpart on the tape`, call.seq);
-      return executeTool(this.recorder, call, invoke);
+      return executeTool(this.recorder, call, invoke, codec);
     }
 
     const changes = deepDiff({ tool: expected.tool, args: expected.args }, { tool: name, args: jsonArgs });
@@ -183,7 +189,7 @@ export class ReplaySession implements Session {
         expectedId: expected.id,
         actualSeq: call.seq,
       });
-      if (this.passthrough) return executeTool(this.recorder, call, invoke);
+      if (this.passthrough) return executeTool(this.recorder, call, invoke, codec);
     }
 
     const base = { type: 'tool_result', tool: name, callId: call.callId, durationMs: 0 } as const;
@@ -192,7 +198,7 @@ export class ReplaySession implements Session {
       throw deserializeError(recorded.error);
     }
     this.recorder.append({ ...base, result: clone(recorded.result) });
-    return clone(recorded.result);
+    return codec.revive(clone(recorded.result) ?? null);
   }
 
   /**

@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { ClockReadEvent } from '../tape/schema.js';
+import type { LlmCodec, ToolCodec } from './codec.js';
 
 export interface LlmRequest {
   provider: string;
@@ -15,8 +16,8 @@ export interface Session {
   readonly mode: 'record' | 'replay';
   now(source: ClockReadEvent['source']): number;
   random(): number;
-  llm(call: LlmRequest, invoke: () => Promise<unknown>): Promise<unknown>;
-  tool(name: string, args: unknown, invoke: () => Promise<unknown>): Promise<unknown>;
+  llm(call: LlmRequest, invoke: () => Promise<unknown>, codec?: LlmCodec): Promise<unknown>;
+  tool(name: string, args: unknown, invoke: () => Promise<unknown>, codec?: ToolCodec): Promise<unknown>;
 }
 
 interface Store {

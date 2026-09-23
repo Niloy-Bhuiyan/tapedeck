@@ -2,25 +2,24 @@ import { serializeError, toJson } from '../tape/json.js';
 import { TapeRecorder } from '../tape/recorder.js';
 import type { ClockReadEvent, LlmCallEvent, Tape, TapeMetadata, TapeOutcome, ToolCallEvent } from '../tape/schema.js';
 import { realNow, realRandom, runSuspended, type LlmRequest, type Session } from './context.js';
-import { collectStream, isStreamRequest, streamOf } from './stream.js';
+import { sdkCodec, valueCodec, type LlmCodec, type ToolCodec } from './codec.js';
 
 /**
  * Makes a real LLM call and fills its outcome into `event`.
  * Shared by recording and by replay's passthrough mode.
  */
-export async function executeLlm(event: LlmCallEvent, call: LlmRequest, invoke: () => Promise<unknown>): Promise<unknown> {
+export async function executeLlm(
+  event: LlmCallEvent,
+  call: LlmRequest,
+  invoke: () => Promise<unknown>,
+  codec: LlmCodec = sdkCodec,
+): Promise<unknown> {
   const start = realNow();
   try {
-    const response = await runSuspended(invoke);
-    if (!isStreamRequest(call.request)) {
-      event.response = toJson(response);
-      return response;
-    }
-    // Streams are buffered so the chunks can be recorded, then re-emitted.
-    const chunks = await runSuspended(() => collectStream(response));
-    event.stream = true;
-    event.response = toJson(chunks);
-    return streamOf(chunks);
+    const live = await runSuspended(invoke);
+    const { value, captured } = await runSuspended(() => codec.capture(live, call.request));
+    Object.assign(event, captured);
+    return value;
   } catch (error) {
     event.error = serializeError(error);
     throw error;
@@ -37,13 +36,14 @@ export async function executeTool(
   recorder: TapeRecorder,
   call: ToolCallEvent,
   invoke: () => Promise<unknown>,
+  codec: ToolCodec = valueCodec,
 ): Promise<unknown> {
   const start = realNow();
   const base = { type: 'tool_result', tool: call.tool, callId: call.callId } as const;
   try {
-    const result = await runSuspended(invoke);
-    recorder.append({ ...base, result: toJson(result), durationMs: realNow() - start });
-    return result;
+    const { value, result } = await runSuspended(async () => codec.capture(await invoke()));
+    recorder.append({ ...base, result, durationMs: realNow() - start });
+    return value;
   } catch (error) {
     recorder.append({ ...base, error: serializeError(error), durationMs: realNow() - start });
     throw error;
@@ -70,7 +70,7 @@ export class RecordSession implements Session {
     return value;
   }
 
-  llm(call: LlmRequest, invoke: () => Promise<unknown>): Promise<unknown> {
+  llm(call: LlmRequest, invoke: () => Promise<unknown>, codec?: LlmCodec): Promise<unknown> {
     const event = this.recorder.append({
       type: 'llm_call',
       provider: call.provider,
@@ -78,13 +78,13 @@ export class RecordSession implements Session {
       request: toJson(call.request),
       durationMs: 0,
     });
-    return executeLlm(event, call, invoke);
+    return executeLlm(event, call, invoke, codec);
   }
 
-  tool(name: string, args: unknown, invoke: () => Promise<unknown>): Promise<unknown> {
+  tool(name: string, args: unknown, invoke: () => Promise<unknown>, codec?: ToolCodec): Promise<unknown> {
     const call = this.recorder.append({ type: 'tool_call', tool: name, callId: '', args: toJson(args) });
     call.callId = call.id;
-    return executeTool(this.recorder, call, invoke);
+    return executeTool(this.recorder, call, invoke, codec);
   }
 
   toTape(options: { name?: string; metadata?: TapeMetadata; outcome?: TapeOutcome } = {}): Tape {

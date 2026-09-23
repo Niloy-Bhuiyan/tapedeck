@@ -47,6 +47,13 @@ interface EventBase {
   t: number;
 }
 
+/** HTTP details for LLM calls captured at the network level (fetch). */
+export interface HttpMeta {
+  status: number;
+  /** A safe subset of response headers (content type and retry hints). Never auth headers. */
+  headers: Record<string, string>;
+}
+
 export interface LlmCallEvent extends EventBase {
   type: 'llm_call';
   /** e.g. "openai", "anthropic", "mock". */
@@ -59,6 +66,8 @@ export interface LlmCallEvent extends EventBase {
   response?: Json;
   /** True when the call was made with `stream: true`. */
   stream?: boolean;
+  /** Present for calls captured by the fetch interceptor rather than an SDK wrapper. */
+  http?: HttpMeta;
   /** Present when the call threw instead of returning. */
   error?: SerializedError;
   durationMs: number;
