@@ -26,8 +26,6 @@ interface Store {
 
 interface Runtime {
   als: AsyncLocalStorage<Store>;
-  /** Process-wide session, used by CLI-driven runs (see `activateFromEnv`). */
-  globalSession: Session | null;
   /** The unpatched globals, captured once before anything is patched. */
   originals: { Date: DateConstructor; random: () => number };
   installed: boolean;
@@ -44,15 +42,13 @@ const holder = globalThis as typeof globalThis & { [KEY]?: Runtime };
 
 export const runtime: Runtime = (holder[KEY] ??= {
   als: new AsyncLocalStorage<Store>(),
-  globalSession: null,
   originals: { Date, random: Math.random },
   installed: false,
 });
 
 /** The session that should handle a call made right now, if any. */
 export function currentSession(): Session | null {
-  const store = runtime.als.getStore();
-  return store ? store.session : runtime.globalSession;
+  return runtime.als.getStore()?.session ?? null;
 }
 
 /** Runs `fn` with `session` active for it and everything it awaits. */
