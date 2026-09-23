@@ -12,6 +12,18 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "import": "./dist/testing/index.js"
+    },
+    "./vitest": {
+      "types": "./dist/testing/vitest.d.ts",
+      "import": "./dist/testing/vitest.js"
+    },
+    "./jest": {
+      "types": "./dist/testing/jest.d.ts",
+      "import": "./dist/testing/jest.js"
+    },
     "./package.json": "./package.json"
   },
   "bin": {
@@ -56,13 +68,17 @@
   },
   "peerDependencies": {
     "openai": ">=4",
-    "@anthropic-ai/sdk": ">=0.20"
+    "@anthropic-ai/sdk": ">=0.20",
+    "vitest": ">=1"
   },
   "peerDependenciesMeta": {
     "openai": {
       "optional": true
     },
     "@anthropic-ai/sdk": {
+      "optional": true
+    },
+    "vitest": {
       "optional": true
     }
   }
