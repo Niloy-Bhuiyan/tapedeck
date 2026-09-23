@@ -3,7 +3,7 @@ import { installGlobals } from './runtime/globals.js';
 import { RecordSession } from './runtime/record-session.js';
 import { serializeError, toJson } from './tape/json.js';
 import type { Tape, TapeMetadata, TapeOutcome } from './tape/schema.js';
-import { VERSION } from './version.js';
+import { defaultMetadata } from './version.js';
 
 export interface RecordOptions {
   /** Human label stored on the tape. */
@@ -16,10 +16,6 @@ export interface RecordOptions {
 export type RecordResult<T> =
   | { ok: true; result: T; tape: Tape }
   | { ok: false; error: unknown; tape: Tape };
-
-export function defaultMetadata(): TapeMetadata {
-  return { tapedeckVersion: VERSION, node: process.version };
-}
 
 /**
  * Runs `fn` for real and records every intercepted LLM call, tool call,
