@@ -1,5 +1,7 @@
 # TapeDeck
 
+[![CI](https://github.com/Niloy-Bhuiyan/tapedeck/actions/workflows/ci.yml/badge.svg)](https://github.com/Niloy-Bhuiyan/tapedeck/actions/workflows/ci.yml)
+
 **VCR for AI agents — record once, replay debugging for free.**
 
 TapeDeck records every LLM call, tool call, tool result, clock read and
