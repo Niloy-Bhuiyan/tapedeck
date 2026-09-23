@@ -1,0 +1,491 @@
+{
+  "format": "tapedeck.tape",
+  "version": 1,
+  "id": "903da1a8-83fb-4941-bc8c-57f06fb21c0e",
+  "createdAt": "2026-09-23T20:41:25.143Z",
+  "metadata": {
+    "tapedeckVersion": "0.1.0",
+    "node": "v24.15.0",
+    "command": "node --import tsx examples/research-agent/main.ts"
+  },
+  "events": [
+    {
+      "id": "clock_read:b93964f9:0",
+      "seq": 0,
+      "t": 37,
+      "type": "clock_read",
+      "source": "Date.now",
+      "value": 1790196085179
+    },
+    {
+      "id": "random_draw:48698e22:0",
+      "seq": 1,
+      "t": 37,
+      "type": "random_draw",
+      "value": 0.9521905359363448
+    },
+    {
+      "id": "llm_call:e5b9eae2:0",
+      "seq": 2,
+      "t": 37,
+      "type": "llm_call",
+      "provider": "openai",
+      "operation": "chat.completions.create",
+      "request": {
+        "model": "gpt-4.1-mini",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are a careful research assistant. Use web_search to find facts and calculator for arithmetic. Answer in one sentence."
+          },
+          {
+            "role": "user",
+            "content": "What is the combined population of Tokyo and Delhi, and how many people per square kilometre is that?"
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "function": {
+              "name": "web_search",
+              "description": "Search the web and return result snippets.",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "query": {
+                    "type": "string",
+                    "description": "Search query"
+                  }
+                },
+                "required": [
+                  "query"
+                ]
+              }
+            }
+          },
+          {
+            "type": "function",
+            "function": {
+              "name": "calculator",
+              "description": "Evaluate an arithmetic expression using + - * / and parentheses.",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "expression": {
+                    "type": "string",
+                    "description": "e.g. (1 + 2) / 3"
+                  }
+                },
+                "required": [
+                  "expression"
+                ]
+              }
+            }
+          }
+        ],
+        "temperature": 0
+      },
+      "durationMs": 1,
+      "response": {
+        "id": "chatcmpl-mock-0",
+        "object": "chat.completion",
+        "created": 1767225600,
+        "model": "gpt-4.1-mini",
+        "choices": [
+          {
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": null,
+              "refusal": null,
+              "tool_calls": [
+                {
+                  "id": "call_mock_0_0",
+                  "type": "function",
+                  "function": {
+                    "name": "web_search",
+                    "arguments": "{\"query\":\"tokyo population and area\"}"
+                  }
+                },
+                {
+                  "id": "call_mock_0_1",
+                  "type": "function",
+                  "function": {
+                    "name": "web_search",
+                    "arguments": "{\"query\":\"delhi population and area\"}"
+                  }
+                }
+              ]
+            },
+            "finish_reason": "tool_calls",
+            "logprobs": null
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 71,
+          "completion_tokens": 82,
+          "total_tokens": 153
+        }
+      }
+    },
+    {
+      "id": "tool_call:c826a7b5:0",
+      "seq": 3,
+      "t": 38,
+      "type": "tool_call",
+      "tool": "web_search",
+      "callId": "tool_call:c826a7b5:0",
+      "args": {
+        "query": "tokyo population and area"
+      }
+    },
+    {
+      "id": "tool_result:f7e7c0b0:0",
+      "seq": 4,
+      "t": 39,
+      "type": "tool_result",
+      "tool": "web_search",
+      "callId": "tool_call:c826a7b5:0",
+      "result": [
+        {
+          "title": "Tokyo – population and area",
+          "snippet": "Tokyo metropolis: population 14,094,034; area 2,194 km².",
+          "url": "https://example.com/tokyo"
+        }
+      ],
+      "durationMs": 1
+    },
+    {
+      "id": "tool_call:70f5c806:0",
+      "seq": 5,
+      "t": 39,
+      "type": "tool_call",
+      "tool": "web_search",
+      "callId": "tool_call:70f5c806:0",
+      "args": {
+        "query": "delhi population and area"
+      }
+    },
+    {
+      "id": "tool_result:afe6f475:0",
+      "seq": 6,
+      "t": 39,
+      "type": "tool_result",
+      "tool": "web_search",
+      "callId": "tool_call:70f5c806:0",
+      "result": [
+        {
+          "title": "Delhi – population and area",
+          "snippet": "National Capital Territory of Delhi: population 16,787,941; area 1,484 km².",
+          "url": "https://example.com/delhi"
+        }
+      ],
+      "durationMs": 0
+    },
+    {
+      "id": "llm_call:fbce575b:0",
+      "seq": 7,
+      "t": 39,
+      "type": "llm_call",
+      "provider": "openai",
+      "operation": "chat.completions.create",
+      "request": {
+        "model": "gpt-4.1-mini",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are a careful research assistant. Use web_search to find facts and calculator for arithmetic. Answer in one sentence."
+          },
+          {
+            "role": "user",
+            "content": "What is the combined population of Tokyo and Delhi, and how many people per square kilometre is that?"
+          },
+          {
+            "role": "assistant",
+            "content": null,
+            "refusal": null,
+            "tool_calls": [
+              {
+                "id": "call_mock_0_0",
+                "type": "function",
+                "function": {
+                  "name": "web_search",
+                  "arguments": "{\"query\":\"tokyo population and area\"}"
+                }
+              },
+              {
+                "id": "call_mock_0_1",
+                "type": "function",
+                "function": {
+                  "name": "web_search",
+                  "arguments": "{\"query\":\"delhi population and area\"}"
+                }
+              }
+            ]
+          },
+          {
+            "role": "tool",
+            "tool_call_id": "call_mock_0_0",
+            "content": "[{\"title\":\"Tokyo – population and area\",\"snippet\":\"Tokyo metropolis: population 14,094,034; area 2,194 km².\",\"url\":\"https://example.com/tokyo\"}]"
+          },
+          {
+            "role": "tool",
+            "tool_call_id": "call_mock_0_1",
+            "content": "[{\"title\":\"Delhi – population and area\",\"snippet\":\"National Capital Territory of Delhi: population 16,787,941; area 1,484 km².\",\"url\":\"https://example.com/delhi\"}]"
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "function": {
+              "name": "web_search",
+              "description": "Search the web and return result snippets.",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "query": {
+                    "type": "string",
+                    "description": "Search query"
+                  }
+                },
+                "required": [
+                  "query"
+                ]
+              }
+            }
+          },
+          {
+            "type": "function",
+            "function": {
+              "name": "calculator",
+              "description": "Evaluate an arithmetic expression using + - * / and parentheses.",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "expression": {
+                    "type": "string",
+                    "description": "e.g. (1 + 2) / 3"
+                  }
+                },
+                "required": [
+                  "expression"
+                ]
+              }
+            }
+          }
+        ],
+        "temperature": 0
+      },
+      "durationMs": 0,
+      "response": {
+        "id": "chatcmpl-mock-1",
+        "object": "chat.completion",
+        "created": 1767225600,
+        "model": "gpt-4.1-mini",
+        "choices": [
+          {
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": null,
+              "refusal": null,
+              "tool_calls": [
+                {
+                  "id": "call_mock_1_0",
+                  "type": "function",
+                  "function": {
+                    "name": "calculator",
+                    "arguments": "{\"expression\":\"(14094034 + 16787941) / (2194 + 1484)\"}"
+                  }
+                }
+              ]
+            },
+            "finish_reason": "tool_calls",
+            "logprobs": null
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 265,
+          "completion_tokens": 53,
+          "total_tokens": 318
+        }
+      }
+    },
+    {
+      "id": "tool_call:f1f17819:0",
+      "seq": 8,
+      "t": 39,
+      "type": "tool_call",
+      "tool": "calculator",
+      "callId": "tool_call:f1f17819:0",
+      "args": {
+        "expression": "(14094034 + 16787941) / (2194 + 1484)"
+      }
+    },
+    {
+      "id": "tool_result:de1757ec:0",
+      "seq": 9,
+      "t": 40,
+      "type": "tool_result",
+      "tool": "calculator",
+      "callId": "tool_call:f1f17819:0",
+      "result": {
+        "expression": "(14094034 + 16787941) / (2194 + 1484)",
+        "result": 8396.4
+      },
+      "durationMs": 1
+    },
+    {
+      "id": "llm_call:2fd9f8b1:0",
+      "seq": 10,
+      "t": 40,
+      "type": "llm_call",
+      "provider": "openai",
+      "operation": "chat.completions.create",
+      "request": {
+        "model": "gpt-4.1-mini",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are a careful research assistant. Use web_search to find facts and calculator for arithmetic. Answer in one sentence."
+          },
+          {
+            "role": "user",
+            "content": "What is the combined population of Tokyo and Delhi, and how many people per square kilometre is that?"
+          },
+          {
+            "role": "assistant",
+            "content": null,
+            "refusal": null,
+            "tool_calls": [
+              {
+                "id": "call_mock_0_0",
+                "type": "function",
+                "function": {
+                  "name": "web_search",
+                  "arguments": "{\"query\":\"tokyo population and area\"}"
+                }
+              },
+              {
+                "id": "call_mock_0_1",
+                "type": "function",
+                "function": {
+                  "name": "web_search",
+                  "arguments": "{\"query\":\"delhi population and area\"}"
+                }
+              }
+            ]
+          },
+          {
+            "role": "tool",
+            "tool_call_id": "call_mock_0_0",
+            "content": "[{\"title\":\"Tokyo – population and area\",\"snippet\":\"Tokyo metropolis: population 14,094,034; area 2,194 km².\",\"url\":\"https://example.com/tokyo\"}]"
+          },
+          {
+            "role": "tool",
+            "tool_call_id": "call_mock_0_1",
+            "content": "[{\"title\":\"Delhi – population and area\",\"snippet\":\"National Capital Territory of Delhi: population 16,787,941; area 1,484 km².\",\"url\":\"https://example.com/delhi\"}]"
+          },
+          {
+            "role": "assistant",
+            "content": null,
+            "refusal": null,
+            "tool_calls": [
+              {
+                "id": "call_mock_1_0",
+                "type": "function",
+                "function": {
+                  "name": "calculator",
+                  "arguments": "{\"expression\":\"(14094034 + 16787941) / (2194 + 1484)\"}"
+                }
+              }
+            ]
+          },
+          {
+            "role": "tool",
+            "tool_call_id": "call_mock_1_0",
+            "content": "{\"expression\":\"(14094034 + 16787941) / (2194 + 1484)\",\"result\":8396.4}"
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "function": {
+              "name": "web_search",
+              "description": "Search the web and return result snippets.",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "query": {
+                    "type": "string",
+                    "description": "Search query"
+                  }
+                },
+                "required": [
+                  "query"
+                ]
+              }
+            }
+          },
+          {
+            "type": "function",
+            "function": {
+              "name": "calculator",
+              "description": "Evaluate an arithmetic expression using + - * / and parentheses.",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "expression": {
+                    "type": "string",
+                    "description": "e.g. (1 + 2) / 3"
+                  }
+                },
+                "required": [
+                  "expression"
+                ]
+              }
+            }
+          }
+        ],
+        "temperature": 0
+      },
+      "durationMs": 26,
+      "response": {
+        "id": "chatcmpl-mock-2",
+        "object": "chat.completion",
+        "created": 1767225600,
+        "model": "gpt-4.1-mini",
+        "choices": [
+          {
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "Together Tokyo and Delhi have about 30,881,975 people on 3,678 km², which is roughly 8,396.4 people per km².",
+              "refusal": null
+            },
+            "finish_reason": "stop",
+            "logprobs": null
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 353,
+          "completion_tokens": 39,
+          "total_tokens": 392
+        }
+      }
+    },
+    {
+      "id": "clock_read:b93964f9:1",
+      "seq": 11,
+      "t": 67,
+      "type": "clock_read",
+      "source": "Date.now",
+      "value": 1790196085210
+    }
+  ],
+  "name": "research-agent",
+  "outcome": {
+    "status": "ok",
+    "exitCode": 0
+  }
+}
