@@ -22,6 +22,17 @@ export {
 } from './diff/diff.js';
 export type { FieldChange } from './diff/deep.js';
 
+export {
+  NotInstrumentedError,
+  quoteCommand,
+  recordCommand,
+  replayCommand,
+  type CommandReplayResult,
+  type CommandRun,
+  type RecordCommandOptions,
+  type ReplayCommandOptions,
+} from './process.js';
+
 export { tool } from './interceptors/tool.js';
 export { wrapClient } from './interceptors/client.js';
 export { ANTHROPIC_OPERATIONS, OPENAI_OPERATIONS, wrapAnthropic, wrapOpenAI } from './interceptors/providers.js';
