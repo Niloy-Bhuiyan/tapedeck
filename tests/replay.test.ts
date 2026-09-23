@@ -134,6 +134,29 @@ describe('replay()', () => {
       expect(agent.real).toEqual({ llm: 0, tool: 0 });
     });
 
+    it('exposes a structured diff of the replay run', async () => {
+      const tape = await recordAgent();
+      const res = await replay(tape, makeAgent({ query: 'records' }).run, { mode: 'diff' });
+      expect(res.ok).toBe(false);
+      expect(res.diff.firstDivergence).toMatchObject({
+        status: 'changed',
+        key: 'tool_call:search',
+        changes: [{ path: 'args.q', a: 'tapes', b: 'records' }],
+      });
+      expect(res.diff.stats.changed).toBe(1);
+    });
+
+    it('detects code that skips a recorded step', async () => {
+      const tape = await recordAgent();
+      const res = await replay(tape, makeAgent({ skipTool: true }).run, { mode: 'diff' });
+      // Skipping the tool changes the LLM prompt, and the tool call goes unconsumed.
+      expect(res.divergences.map((d) => d.kind)).toEqual(['mismatched_call', 'unconsumed_events']);
+      expect(res.diff.steps.filter((s) => s.status === 'removed').map((s) => s.key)).toEqual([
+        'tool_call:search',
+        'tool_result:search',
+      ]);
+    });
+
     it('stops at a call the tape cannot answer', async () => {
       const tape = await recordAgent();
       const res = await replay(tape, makeAgent({ extraCall: true }).run, { mode: 'diff' });

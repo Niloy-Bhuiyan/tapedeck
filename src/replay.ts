@@ -1,3 +1,4 @@
+import { diffTapes, type DiffOptions, type TapeDiff } from './diff/diff.js';
 import { runInSession } from './runtime/context.js';
 import { installGlobals } from './runtime/globals.js';
 import { ReplaySession, type ReplaySessionOptions } from './runtime/replay-session.js';
@@ -5,10 +6,16 @@ import { readTapeFile } from './tape/io.js';
 import { serializeError, toJson } from './tape/json.js';
 import type { Divergence, Tape, TapeOutcome } from './tape/schema.js';
 
-export type ReplayOptions = ReplaySessionOptions;
+export interface ReplayOptions extends ReplaySessionOptions {
+  /** Options for the diff between the source tape and the replay run. */
+  diff?: DiffOptions;
+}
 
 export interface ReplayResult<T> {
-  /** True when the code made exactly the recorded calls with the recorded inputs. */
+  /**
+   * True when the replay reproduced the tape: no divergences during the run
+   * and no differences between the source tape and the replay tape.
+   */
   ok: boolean;
   /** Return value of `fn`, when it returned. */
   result?: T;
@@ -19,6 +26,8 @@ export interface ReplayResult<T> {
   expected: Tape;
   /** A tape of what the code actually did during replay. */
   actual: Tape;
+  /** Step-by-step comparison of `expected` and `actual`. */
+  diff: TapeDiff;
 }
 
 /**
@@ -52,11 +61,7 @@ export async function replay<T>(
   }
 
   const divergences = session.finish();
-  return {
-    ok: divergences.length === 0,
-    ...returned,
-    divergences,
-    expected,
-    actual: session.toTape(outcome),
-  };
+  const actual = session.toTape(outcome);
+  const diff = diffTapes(expected, actual, options.diff);
+  return { ok: divergences.length === 0 && diff.equal, ...returned, divergences, expected, actual, diff };
 }
