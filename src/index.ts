@@ -41,6 +41,11 @@ export { formatForPath, parseTape, readTapeFile, serializeTape, writeTapeFile, t
 export { TapeFormatError, validateTape } from './tape/validate.js';
 export * from './tape/schema.js';
 
+// MOCK: deterministic offline providers, see MOCKED_COMPONENTS.md.
+export { MockOpenAI, echoResponder, type MockChatCompletion, type MockChatParams } from './mock/openai.js';
+export { MockAnthropic, echoMessageResponder, type MockMessage, type MockMessageParams } from './mock/anthropic.js';
+export type { MockReply, MockResponder, MockToolCall } from './mock/reply.js';
+
 export { formatDiff, formatTimeline, type FormatOptions } from './format/text.js';
 export { VERSION } from './version.js';
 
