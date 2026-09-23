@@ -1,0 +1,57 @@
+{
+  "name": "tapedeck",
+  "version": "0.1.0",
+  "description": "VCR for AI agents: deterministic record/replay and regression testing for LLM agent applications.",
+  "license": "MIT",
+  "author": "Niloy Bhuiyan",
+  "type": "module",
+  "keywords": [
+    "llm",
+    "agents",
+    "testing",
+    "record",
+    "replay",
+    "vcr",
+    "openai",
+    "anthropic",
+    "regression"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Niloy-Bhuiyan/tapedeck.git"
+  },
+  "engines": {
+    "node": ">=20.6"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@anthropic-ai/sdk": "^0.128.0",
+    "@types/node": "^22.20.4",
+    "openai": "^7.23.0",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.1"
+  },
+  "peerDependencies": {
+    "openai": ">=4",
+    "@anthropic-ai/sdk": ">=0.20"
+  },
+  "peerDependenciesMeta": {
+    "openai": {
+      "optional": true
+    },
+    "@anthropic-ai/sdk": {
+      "optional": true
+    }
+  }
+}
