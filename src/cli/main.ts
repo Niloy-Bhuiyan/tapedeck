@@ -1,8 +1,11 @@
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { parseArgs } from 'node:util';
 import { diffTapes, type DiffOptions } from '../diff/diff.js';
 import { colorEnabled, palette } from '../format/colors.js';
 import { formatDiff, formatTimeline } from '../format/text.js';
 import { quoteCommand, recordCommand, replayCommand } from '../process.js';
+import { renderDiffReport, renderTapeReport } from '../report/html.js';
 import { readTapeFile } from '../tape/io.js';
 import { EVENT_TYPES, type EventType } from '../tape/schema.js';
 import { VERSION } from '../version.js';
@@ -29,6 +32,9 @@ Usage:
 
   tapedeck diff <tape-a> <tape-b>
       Compare two tapes step by step. Exits 1 if they differ.
+
+  tapedeck report <tape> [--diff <tape-b>] [-o <file.html>]
+      Render a tape, or a diff of two tapes, as a self-contained HTML page.
 
 Options:
   -o, --output <path>     Where to write the tape / report
@@ -145,6 +151,25 @@ function diffCmd(argv: string[], io: CliIO): number {
   return diff.equal ? 0 : 1;
 }
 
+function reportCmd(argv: string[], io: CliIO): number {
+  const { values, positionals } = parseArgs({
+    args: argv,
+    allowPositionals: true,
+    options: { diff: { type: 'string' }, output: { type: 'string', short: 'o' }, ignore: { type: 'string' } },
+  });
+  if (positionals.length !== 1) throw new UsageError('report: expected one tape file (use --diff <tape-b> to compare)');
+  const tape = readTapeFile(positionals[0]!);
+  const html = values.diff
+    ? renderDiffReport(tape, readTapeFile(values.diff), parseIgnore(values.ignore))
+    : renderTapeReport(tape);
+  const output = values.output ?? 'tapedeck-report.html';
+  mkdirSync(dirname(output), { recursive: true });
+  writeFileSync(output, html);
+  io.stderr(`${palette(io.color).green('●')} Report written to ${output}
+`);
+  return 0;
+}
+
 /** Runs the CLI and returns the process exit code. */
 export async function main(argv: string[], io: CliIO): Promise<number> {
   const [command, ...rest] = argv;
@@ -156,6 +181,8 @@ export async function main(argv: string[], io: CliIO): Promise<number> {
         return await replayCmd(rest, io);
       case 'diff':
         return diffCmd(rest, io);
+      case 'report':
+        return reportCmd(rest, io);
       case '-v':
       case '--version':
         io.stdout(`${VERSION}\n`);
