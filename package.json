@@ -5,6 +5,18 @@
   "license": "MIT",
   "author": "Niloy Bhuiyan",
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "tapedeck": "./dist/cli/bin.js"
+  },
   "keywords": [
     "llm",
     "agents",
