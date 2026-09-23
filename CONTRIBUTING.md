@@ -13,7 +13,7 @@ npm test           # vitest, fully offline, no API keys needed
 npm run typecheck  # tsc --noEmit over src, tests and examples
 ```
 
-Node.js 20.6+ is required. You never need API keys to develop: the example
+Node.js 22.12+ is required. You never need API keys to develop: the example
 and tests use the deterministic providers in `src/mock/`
 (see [MOCKED_COMPONENTS.md](MOCKED_COMPONENTS.md)).
 

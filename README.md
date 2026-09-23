@@ -55,7 +55,7 @@ builds it):
 npm install --save-dev github:Niloy-Bhuiyan/tapedeck
 ```
 
-Requires Node.js 20.6+. TapeDeck is an ES module.
+Requires Node.js 22+. TapeDeck is an ES module.
 
 ## Quickstart
 

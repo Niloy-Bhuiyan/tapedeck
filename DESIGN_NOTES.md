@@ -86,7 +86,7 @@ plus an addition, and changed arguments as a change.
 because a run that errors is still a valid (and often the most interesting)
 tape. `replay()` follows the same shape.
 
-## ESM only, Node 20.6+
+## ESM only, Node 22+
 
 TapeDeck ships as an ES module. Both official SDKs, Vitest and modern Node
 tooling are ESM-first; a dual build adds the "dual package hazard" on top of
