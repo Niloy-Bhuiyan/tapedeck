@@ -127,6 +127,13 @@ describe('diffTapes', () => {
     expect(diffTapes(tape(baseline), tape(baseline, { status: 'ok', value: 'other' }), { ignoreOutcome: true }).equal).toBe(true);
   });
 
+  it('compares only the status of a process outcome against an in-process outcome', () => {
+    const cli = tape(baseline, { status: 'ok', exitCode: 0 });
+    expect(diffTapes(cli, tape(baseline, { status: 'ok', value: { any: 'thing' } })).equal).toBe(true);
+    expect(diffTapes(cli, tape(baseline, { status: 'error', error: { name: 'E', message: 'm' } })).equal).toBe(false);
+    expect(diffTapes(cli, tape(baseline, { status: 'ok', exitCode: 1 })).equal).toBe(false);
+  });
+
   it('can ignore event types', () => {
     const noisy: Step[] = [['clock', 5], ['random', 0.3], ...baseline.slice(1)];
     expect(diffTapes(tape(baseline), tape(noisy)).equal).toBe(false);

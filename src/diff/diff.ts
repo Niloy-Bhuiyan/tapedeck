@@ -134,8 +134,16 @@ function align(a: TapeEvent[], b: TapeEvent[]): Pair[] {
   return pairs;
 }
 
-function outcomePayload(outcome: TapeOutcome | undefined): Json | undefined {
-  return outcome === undefined ? undefined : toJson(outcome);
+/**
+ * Outcomes of a process recording (exit code) and an in-process recording
+ * (return value) are not comparable beyond ok/error, so when the two kinds
+ * meet only the status is compared.
+ */
+function outcomePayloads(a: TapeOutcome | undefined, b: TapeOutcome | undefined): [Json | undefined, Json | undefined] {
+  if (a && b && (a.exitCode === undefined) !== (b.exitCode === undefined)) {
+    return [{ status: a.status }, { status: b.status }];
+  }
+  return [a === undefined ? undefined : toJson(a), b === undefined ? undefined : toJson(b)];
 }
 
 /** Compares tape `a` (the baseline) with tape `b` (e.g. a fresh replay run). */
@@ -151,7 +159,7 @@ export function diffTapes(a: Tape, b: Tape, options: DiffOptions = {}): TapeDiff
     return { index, status: changes.length ? 'changed' : 'match', key, a: ea, b: eb, changes };
   });
 
-  const outcomeChanges = options.ignoreOutcome ? [] : deepDiff(outcomePayload(a.outcome), outcomePayload(b.outcome));
+  const outcomeChanges = options.ignoreOutcome ? [] : deepDiff(...outcomePayloads(a.outcome, b.outcome));
   const outcome: OutcomeDiff = { status: outcomeChanges.length ? 'changed' : 'match', changes: outcomeChanges };
 
   const count = (status: StepStatus) => steps.filter((s) => s.status === status).length;
