@@ -5,6 +5,7 @@
  * makes into a tape; replay it later with zero API cost; diff runs to catch
  * regressions.
  */
+import { installFetchInterceptor } from './interceptors/fetch.js';
 import { activateFromEnv } from './runtime/env.js';
 
 export { record, type RecordOptions, type RecordResult } from './record.js';
@@ -34,6 +35,13 @@ export {
 } from './process.js';
 
 export { tool } from './interceptors/tool.js';
+export {
+  LLM_HOSTS,
+  configureFetchInterception,
+  installFetchInterceptor,
+  uninstallFetchInterceptor,
+  type FetchInterceptionOptions,
+} from './interceptors/fetch.js';
 export { wrapClient } from './interceptors/client.js';
 export { ANTHROPIC_OPERATIONS, OPENAI_OPERATIONS, wrapAnthropic, wrapOpenAI } from './interceptors/providers.js';
 
@@ -51,6 +59,9 @@ export { renderDiffReport, renderTapeReport } from './report/html.js';
 export type { ReportData } from './report/data.js';
 export { VERSION } from './version.js';
 
-// When launched by `tapedeck record` / `tapedeck replay --against`, bind
-// a session to the app as soon as it imports TapeDeck.
+// SDKs capture `fetch` when a client is constructed, so patch it as early
+// as possible. Outside a record/replay session the patch is a pass-through.
+installFetchInterceptor();
+// When launched by `tapedeck record` / `tapedeck replay --against`, start
+// the process-wide session (a no-op if the CLI preload already did).
 activateFromEnv();

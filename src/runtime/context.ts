@@ -27,9 +27,16 @@ interface Store {
 
 interface Runtime {
   als: AsyncLocalStorage<Store>;
+  /**
+   * Process-wide fallback session for CLI-driven runs (see activateFromEnv).
+   * Scoped sessions from record()/replay() always take precedence.
+   */
+  globalSession: Session | null;
   /** The unpatched globals, captured once before anything is patched. */
-  originals: { Date: DateConstructor; random: () => number };
+  originals: { Date: DateConstructor; random: () => number; fetch: typeof fetch | undefined };
   installed: boolean;
+  /** State of the fetch interceptor (see interceptors/fetch.ts). */
+  fetch: { installed: boolean; llmHosts: Map<string, string>; httpHosts: Set<string> };
 }
 
 /**
@@ -43,13 +50,16 @@ const holder = globalThis as typeof globalThis & { [KEY]?: Runtime };
 
 export const runtime: Runtime = (holder[KEY] ??= {
   als: new AsyncLocalStorage<Store>(),
-  originals: { Date, random: Math.random },
+  globalSession: null,
+  originals: { Date, random: Math.random, fetch: globalThis.fetch },
   installed: false,
+  fetch: { installed: false, llmHosts: new Map(), httpHosts: new Set() },
 });
 
 /** The session that should handle a call made right now, if any. */
 export function currentSession(): Session | null {
-  return runtime.als.getStore()?.session ?? null;
+  const store = runtime.als.getStore();
+  return store ? store.session : runtime.globalSession;
 }
 
 /** Runs `fn` with `session` active for it and everything it awaits. */
