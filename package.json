@@ -1,6 +1,6 @@
 {
   "name": "tapedeck",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "VCR for AI agents: deterministic record/replay and regression testing for LLM agent applications.",
   "license": "MIT",
   "author": "Niloy Bhuiyan",
