@@ -10,6 +10,12 @@ export interface RecordOptions {
   name?: string;
   /** Extra metadata merged into the tape's metadata. */
   metadata?: TapeMetadata;
+  /**
+   * Extra patterns to scrub from the tape (replaced with "[REDACTED]"), on
+   * top of the built-in API-key and token patterns. Stored on the tape so
+   * replays redact live requests the same way.
+   */
+  redact?: Array<string | RegExp>;
 }
 
 /** The recorded tape plus how `fn` ended. Recording never throws on `fn`'s behalf. */
@@ -28,9 +34,14 @@ export type RecordResult<T> =
  * const { tape } = await record(() => agent.run('question'), { name: 'checkout-flow' });
  * writeTapeFile('tapes/checkout-flow.tape.json', tape);
  */
+/** Normalises user-supplied patterns to regex sources (the form stored on tapes). */
+export function patternSources(patterns: Array<string | RegExp> | undefined): string[] {
+  return (patterns ?? []).map((p) => (typeof p === 'string' ? p : p.source));
+}
+
 export async function record<T>(fn: () => T | Promise<T>, options: RecordOptions = {}): Promise<RecordResult<T>> {
   installGlobals();
-  const session = new RecordSession();
+  const session = new RecordSession({ redact: patternSources(options.redact) });
   const metadata = { ...defaultMetadata(), ...options.metadata };
   const finish = (outcome: TapeOutcome) => session.toTape({ ...(options.name ? { name: options.name } : {}), metadata, outcome });
   try {

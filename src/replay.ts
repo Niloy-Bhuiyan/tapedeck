@@ -1,4 +1,5 @@
 import { diffTapes, type DiffOptions, type TapeDiff } from './diff/diff.js';
+import { patternSources } from './record.js';
 import { runInSession } from './runtime/context.js';
 import { installGlobals } from './runtime/globals.js';
 import { ReplaySession, type ReplaySessionOptions } from './runtime/replay-session.js';
@@ -6,7 +7,9 @@ import { readTapeFile } from './tape/io.js';
 import { serializeError, toJson } from './tape/json.js';
 import type { Divergence, Tape, TapeOutcome } from './tape/schema.js';
 
-export interface ReplayOptions extends ReplaySessionOptions {
+export interface ReplayOptions extends Omit<ReplaySessionOptions, 'redact'> {
+  /** Extra redaction patterns; those stored on the tape are always applied. */
+  redact?: Array<string | RegExp>;
   /** Options for the diff between the source tape and the replay run. */
   diff?: DiffOptions;
 }
@@ -47,7 +50,7 @@ export async function replay<T>(
 ): Promise<ReplayResult<T>> {
   installGlobals();
   const expected = typeof tape === 'string' ? readTapeFile(tape) : tape;
-  const session = new ReplaySession(expected, options);
+  const session = new ReplaySession(expected, { ...options, redact: patternSources(options.redact) });
 
   let outcome: TapeOutcome;
   let returned: { result: T } | { error: unknown };

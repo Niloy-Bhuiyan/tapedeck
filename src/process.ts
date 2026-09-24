@@ -34,6 +34,8 @@ export interface RunOptions {
   llmHosts?: string[];
   /** Non-LLM hosts whose fetch calls are recorded as tools (e.g. a search API). */
   httpHosts?: string[];
+  /** Extra redaction patterns (regex sources), on top of the built-in secret patterns. */
+  redact?: string[];
 }
 
 export class NotInstrumentedError extends Error {
@@ -62,6 +64,7 @@ function runCommand(command: string, env: Record<string, string>, options: RunOp
   const hosts = {
     ...(options.llmHosts?.length ? { [ENV.llmHosts]: options.llmHosts.join(',') } : {}),
     ...(options.httpHosts?.length ? { [ENV.httpHosts]: options.httpHosts.join(',') } : {}),
+    ...(options.redact?.length ? { [ENV.redact]: JSON.stringify(options.redact) } : {}),
   };
   const nodeOptions = [process.env.NODE_OPTIONS, preloadFlags()].filter(Boolean).join(' ');
   return new Promise((resolvePromise, reject) => {

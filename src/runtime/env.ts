@@ -30,7 +30,18 @@ export const ENV = {
   llmHosts: 'TAPEDECK_LLM_HOSTS',
   /** Comma-separated non-LLM hosts whose fetch calls are recorded as tools. */
   httpHosts: 'TAPEDECK_HTTP_HOSTS',
+  /** JSON array of extra redaction patterns (regex sources). */
+  redact: 'TAPEDECK_REDACT',
 } as const;
+
+function parseRedact(value: string | undefined): string[] {
+  if (!value) return [];
+  const parsed: unknown = JSON.parse(value);
+  if (!Array.isArray(parsed) || !parsed.every((p) => typeof p === 'string')) {
+    throw new Error(`${ENV.redact} must be a JSON array of strings`);
+  }
+  return parsed;
+}
 
 /**
  * Detaches the session and hands over the exit code before any other exit
@@ -81,7 +92,7 @@ export function activateFromEnv(env: NodeJS.ProcessEnv = process.env): boolean {
   installFetchInterceptor();
 
   if (mode === 'record') {
-    const session = new RecordSession();
+    const session = new RecordSession({ redact: parseRedact(settings.redact) });
     runtime.globalSession = session;
     onExit((code) => {
       if (!shouldWrite(session, output)) return;
@@ -108,6 +119,7 @@ export function activateFromEnv(env: NodeJS.ProcessEnv = process.env): boolean {
     const session = new ReplaySession(readTapeFile(settings.tape), {
       mode: settings.replayMode === 'diff' ? 'diff' : 'strict',
       passthrough: settings.passthrough === '1',
+      redact: parseRedact(settings.redact),
     });
     runtime.globalSession = session;
     onExit((code) => {

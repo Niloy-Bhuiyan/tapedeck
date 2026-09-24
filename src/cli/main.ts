@@ -48,6 +48,8 @@ Options:
                           e.g. localhost:11434 for Ollama
       --http-host <host>  Record calls to this non-LLM host as tools (repeatable),
                           e.g. api.tavily.com
+      --redact <regex>    Also scrub matches of this pattern from tapes (repeatable).
+                          API keys and tokens are always scrubbed.
       --json              Print machine-readable JSON instead of text
   -h, --help              Show this help
   -v, --version           Show the version
@@ -74,12 +76,21 @@ function parseIgnore(value: string | undefined): DiffOptions {
 const HOST_OPTIONS = {
   'llm-host': { type: 'string', multiple: true },
   'http-host': { type: 'string', multiple: true },
+  redact: { type: 'string', multiple: true },
 } as const;
 
-function hostOptions(values: { 'llm-host'?: string[]; 'http-host'?: string[] }) {
+function hostOptions(values: { 'llm-host'?: string[]; 'http-host'?: string[]; redact?: string[] }) {
+  for (const pattern of values.redact ?? []) {
+    try {
+      new RegExp(pattern);
+    } catch {
+      throw new UsageError(`--redact: invalid regular expression ${JSON.stringify(pattern)}`);
+    }
+  }
   return {
     ...(values['llm-host']?.length ? { llmHosts: values['llm-host'] } : {}),
     ...(values['http-host']?.length ? { httpHosts: values['http-host'] } : {}),
+    ...(values.redact?.length ? { redact: values.redact } : {}),
   };
 }
 
