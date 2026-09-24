@@ -18,6 +18,7 @@ are tested against the official `openai` and `@anthropic-ai/sdk` clients
 | Mock reply types | `src/mock/reply.ts` | Shared `MockReply` / `MockResponder` types for the two mocks. | Nothing to swap; only used by the mocks. |
 | Research-agent "brain" | `examples/research-agent/mock-brain.ts` | The model's decisions in the example: search each city, compute density, answer. | Nothing to change: `examples/research-agent/client.ts` already uses the real `OpenAI` client when `OPENAI_API_KEY` is set. Re-record the tape afterwards (`npm run example:record`), because a real model will word things differently. |
 | Research-agent `web_search` | `examples/research-agent/tools.ts` (`MOCK_INDEX`) | A four-entry canned "web". | Replace the body of `webSearch` with a call to a real search API (Brave, Bing, Tavily, SerpAPI…). Keep the `tool('web_search', …)` wrapper so it is still recorded. |
+| Fake OpenAI server | `examples/zero-code/fake-openai-server.ts` | An OpenAI-compatible `POST /v1/chat/completions` endpoint (streaming and not) that the zero-code demo points the untouched SDK at via `OPENAI_BASE_URL`. | Nothing to swap: with a real key, run `npx tapedeck record -- node examples/zero-code/agent.mjs` directly — calls to `api.openai.com` are recorded automatically. |
 
 The mocks are also exported from the package (`MockOpenAI`, `MockAnthropic`)
 because they are handy for users' own offline tests.
