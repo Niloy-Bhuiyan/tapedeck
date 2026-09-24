@@ -1,6 +1,7 @@
 import { deepDiff, describeChange } from '../diff/deep.js';
 import { deserializeError, shortHash, toJson } from '../tape/json.js';
 import { TapeRecorder } from '../tape/recorder.js';
+import { compilePatterns, DEFAULT_SECRET_PATTERNS, redactJson } from '../tape/redact.js';
 import type {
   ClockReadEvent,
   Divergence,
@@ -33,6 +34,12 @@ export interface ReplaySessionOptions {
    * failing. Costs real API calls; off by default.
    */
   passthrough?: boolean;
+  /**
+   * Extra redaction patterns (regex sources). Patterns stored on the tape are
+   * always applied; live requests are redacted the same way before they are
+   * compared with the (already redacted) tape.
+   */
+  redact?: string[];
 }
 
 /** Thrown into the replayed code when it departs from the tape. */
@@ -89,6 +96,8 @@ export class ReplaySession implements Session {
   private readonly randomDraws: RandomDrawEvent[];
   private lastClock: number;
   private readonly fallbackRandom: () => number;
+  private readonly redactSources: string[];
+  private readonly patterns: RegExp[];
 
   constructor(
     readonly source: Tape,
@@ -103,6 +112,8 @@ export class ReplaySession implements Session {
     this.randomDraws = events.filter((e): e is RandomDrawEvent => e.type === 'random_draw');
     for (const e of events) if (e.type === 'tool_result') this.toolResults.set(e.callId, e);
     this.lastClock = Date.parse(source.createdAt);
+    this.redactSources = [...new Set([...(source.metadata.redact ?? []), ...(options.redact ?? [])])];
+    this.patterns = [...DEFAULT_SECRET_PATTERNS, ...compilePatterns(this.redactSources)];
     this.fallbackRandom = seededRandom(parseInt(shortHash(source.id), 16));
   }
 
@@ -120,7 +131,7 @@ export class ReplaySession implements Session {
   }
 
   async llm(call: LlmRequest, invoke: () => Promise<unknown>, codec: LlmCodec = sdkCodec): Promise<unknown> {
-    const request = toJson(call.request);
+    const request = redactJson(toJson(call.request), this.patterns);
     const actual = this.recorder.append({
       type: 'llm_call',
       provider: call.provider,
@@ -169,7 +180,7 @@ export class ReplaySession implements Session {
     invoke: () => Promise<unknown>,
     codec: ToolCodec = valueCodec,
   ): Promise<unknown> {
-    const jsonArgs = toJson(args);
+    const jsonArgs = redactJson(toJson(args), this.patterns);
     const call = this.recorder.append({ type: 'tool_call', tool: name, callId: '', args: jsonArgs });
     call.callId = call.id;
     const label = `tool_call "${name}"`;
@@ -224,15 +235,17 @@ export class ReplaySession implements Session {
 
   /** The tape of what the replayed code actually did. */
   toTape(outcome?: TapeOutcome): Tape {
-    return this.recorder.toTape({
+    const tape = this.recorder.toTape({
       ...(this.source.name !== undefined ? { name: this.source.name } : {}),
       metadata: {
         ...this.source.metadata,
         ...defaultMetadata(),
+        ...(this.redactSources.length ? { redact: this.redactSources } : {}),
         replay: { sourceTapeId: this.source.id, mode: this.replayMode, divergences: this.divergences },
       },
       ...(outcome ? { outcome } : {}),
     });
+    return redactJson(tape as unknown as Json, this.patterns) as unknown as Tape;
   }
 
   private diverge(divergence: Divergence): void {

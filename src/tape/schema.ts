@@ -131,6 +131,8 @@ export interface TapeMetadata {
   llmHosts?: string[];
   /** Non-LLM hosts recorded as http tools (`--http-host`). */
   httpHosts?: string[];
+  /** Extra redaction patterns (regex sources) applied when recording, reapplied on replay. */
+  redact?: string[];
   /** Set on tapes produced by a replay run. */
   replay?: ReplayMetadata;
   [key: string]: Json | ReplayMetadata | undefined;

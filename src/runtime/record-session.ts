@@ -1,6 +1,7 @@
 import { serializeError, toJson } from '../tape/json.js';
 import { TapeRecorder } from '../tape/recorder.js';
-import type { ClockReadEvent, LlmCallEvent, Tape, TapeMetadata, TapeOutcome, ToolCallEvent } from '../tape/schema.js';
+import { compilePatterns, DEFAULT_SECRET_PATTERNS, redactJson } from '../tape/redact.js';
+import type { ClockReadEvent, Json, LlmCallEvent, Tape, TapeMetadata, TapeOutcome, ToolCallEvent } from '../tape/schema.js';
 import { realNow, realRandom, runSuspended, type LlmRequest, type Session } from './context.js';
 import { sdkCodec, valueCodec, type LlmCodec, type ToolCodec } from './codec.js';
 
@@ -54,9 +55,19 @@ export async function executeTool(
  * Performs every call for real and writes what happened to a tape.
  * Callers see exactly what they would have seen without TapeDeck.
  */
+export interface RecordSessionOptions {
+  /** Extra redaction patterns (regex sources), on top of the built-in secret patterns. */
+  redact?: string[];
+}
+
 export class RecordSession implements Session {
   readonly mode = 'record' as const;
   readonly recorder = new TapeRecorder(realNow);
+  private readonly redactSources: string[];
+
+  constructor(options: RecordSessionOptions = {}) {
+    this.redactSources = options.redact ?? [];
+  }
 
   now(source: ClockReadEvent['source']): number {
     const value = realNow();
@@ -87,7 +98,10 @@ export class RecordSession implements Session {
     return executeTool(this.recorder, call, invoke, codec);
   }
 
+  /** The recorded tape, with secrets redacted. */
   toTape(options: { name?: string; metadata?: TapeMetadata; outcome?: TapeOutcome } = {}): Tape {
-    return this.recorder.toTape(options);
+    const metadata = { ...options.metadata, ...(this.redactSources.length ? { redact: this.redactSources } : {}) };
+    const tape = this.recorder.toTape({ ...options, metadata });
+    return redactJson(tape as unknown as Json, [...DEFAULT_SECRET_PATTERNS, ...compilePatterns(this.redactSources)]) as unknown as Tape;
   }
 }
