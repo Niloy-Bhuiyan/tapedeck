@@ -30,7 +30,7 @@ and are exported from the package as `Tape`, `TapeEvent`, etc.
     "node": "v22.4.0",
     "llmHosts": ["localhost:11434"],        // --llm-host: extra hosts captured as LLM calls
     "httpHosts": ["api.tavily.com"],        // --http-host: hosts captured as http tools
-    "redact": ["[\w.]+@example\.com"],     // --redact: extra patterns scrubbed from the tape
+    "redact": ["[\\w.]+@example\\.com"],   // --redact: extra patterns scrubbed from the tape
     "ignorePaths": ["request.metadata"],    // --ignore-path: fields ignored when replaying/diffing
     "replay": { … }                 // only on tapes produced by a replay run
   },
