@@ -20,8 +20,8 @@ export const USAGE = `tapedeck ${VERSION} — VCR for AI agents
 
 Usage:
   tapedeck record [-o <tape>] [-n <name>] -- <command...>
-      Run a command for real and record its LLM calls, tool calls, clock
-      reads and random draws into a tape.
+      Run a Node.js command for real and record its LLM calls, tool calls,
+      clock reads and random draws into a tape. No code changes needed.
 
   tapedeck replay <tape>
       Play a tape back as a timeline (zero API cost, runs no code).
@@ -44,12 +44,16 @@ Options:
       --passthrough       Perform calls the tape cannot answer for real (costs money)
       --ignore <types>    Comma-separated event types to leave out of diffs,
                           e.g. clock_read,random_draw
+      --llm-host <host>   Also treat this host as an LLM API (repeatable),
+                          e.g. localhost:11434 for Ollama
+      --http-host <host>  Record calls to this non-LLM host as tools (repeatable),
+                          e.g. api.tavily.com
       --json              Print machine-readable JSON instead of text
   -h, --help              Show this help
   -v, --version           Show the version
 
-The recorded program must import "tapedeck" (it does if it uses wrapOpenAI,
-wrapAnthropic or tool) — that is what connects it to the CLI.
+Calls to OpenAI, Anthropic, Google, Mistral, Groq, OpenRouter and other
+well-known LLM APIs made through fetch are recorded automatically.
 `;
 
 export class UsageError extends Error {
@@ -67,6 +71,18 @@ function parseIgnore(value: string | undefined): DiffOptions {
   return { ignoreTypes: types as EventType[] };
 }
 
+const HOST_OPTIONS = {
+  'llm-host': { type: 'string', multiple: true },
+  'http-host': { type: 'string', multiple: true },
+} as const;
+
+function hostOptions(values: { 'llm-host'?: string[]; 'http-host'?: string[] }) {
+  return {
+    ...(values['llm-host']?.length ? { llmHosts: values['llm-host'] } : {}),
+    ...(values['http-host']?.length ? { httpHosts: values['http-host'] } : {}),
+  };
+}
+
 function slug(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'recording';
 }
@@ -77,14 +93,22 @@ async function recordCmd(argv: string[], io: CliIO): Promise<number> {
   const { values, positionals } = parseArgs({
     args: own,
     allowPositionals: split === -1,
-    options: { output: { type: 'string', short: 'o' }, name: { type: 'string', short: 'n' } },
+    options: {
+      output: { type: 'string', short: 'o' },
+      name: { type: 'string', short: 'n' },
+      ...HOST_OPTIONS,
+    },
   });
   const commandArgs = split === -1 ? positionals : argv.slice(split + 1);
   if (commandArgs.length === 0) throw new UsageError('record: missing command, e.g. tapedeck record -- node agent.js');
 
   const command = quoteCommand(commandArgs);
   const output = values.output ?? `tapes/${slug(values.name ?? 'recording')}.tape.json`;
-  const run = await recordCommand(command, { output, ...(values.name ? { name: values.name } : {}) });
+  const run = await recordCommand(command, {
+    output,
+    ...(values.name ? { name: values.name } : {}),
+    ...hostOptions(values),
+  });
   const c = palette(io.color);
   io.stderr(
     `${c.green('●')} Recorded ${run.tape.events.length} events → ${output} ${c.dim(`(exit code ${run.exitCode})`)}\n`,
@@ -103,6 +127,7 @@ async function replayCmd(argv: string[], io: CliIO): Promise<number> {
       output: { type: 'string', short: 'o' },
       ignore: { type: 'string' },
       json: { type: 'boolean', default: false },
+      ...HOST_OPTIONS,
     },
   });
   const [tapePath, ...rest] = positionals;
@@ -120,6 +145,7 @@ async function replayCmd(argv: string[], io: CliIO): Promise<number> {
     passthrough: values.passthrough,
     diff: parseIgnore(values.ignore),
     ...(values.output ? { output: values.output } : {}),
+    ...hostOptions(values),
   });
 
   if (values.json) {
