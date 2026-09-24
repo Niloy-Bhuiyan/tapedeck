@@ -1,7 +1,9 @@
+import { existsSync } from 'node:fs';
+import { installFetchInterceptor } from '../interceptors/fetch.js';
 import { readTapeFile, writeTapeFile } from '../tape/io.js';
 import type { TapeOutcome } from '../tape/schema.js';
 import { defaultMetadata } from '../version.js';
-import { runtime, type Session } from './context.js';
+import { runtime } from './context.js';
 import { installGlobals } from './globals.js';
 import { RecordSession } from './record-session.js';
 import { ReplaySession } from './replay-session.js';
@@ -24,6 +26,10 @@ export const ENV = {
   /** Record only: tape name and command line, stored in the tape. */
   name: 'TAPEDECK_NAME',
   command: 'TAPEDECK_COMMAND',
+  /** Extra comma-separated hosts to treat as LLM APIs, e.g. "localhost:11434". */
+  llmHosts: 'TAPEDECK_LLM_HOSTS',
+  /** Comma-separated non-LLM hosts whose fetch calls are recorded as tools. */
+  httpHosts: 'TAPEDECK_HTTP_HOSTS',
 } as const;
 
 /**
@@ -33,19 +39,20 @@ export const ENV = {
  */
 function onExit(write: (code: number) => void): void {
   process.prependListener('exit', (code) => {
-    runtime.als.enterWith({ session: null });
+    runtime.globalSession = null;
     write(code);
   });
 }
 
 /**
- * Binds `session` to the code that is running now and everything it
- * schedules from here on. Work scheduled earlier (e.g. a loader's pending
- * cache maintenance) keeps its own context and is not captured, which a
- * process-global fallback could not guarantee.
+ * The CLI's preload runs in every Node process of the command's process
+ * tree — including wrappers such as npx or tsx that make no LLM calls and
+ * exit last. A process only writes the tape if it actually made calls, or
+ * if nothing has been written yet, so wrappers never clobber the real tape.
  */
-function enter(session: Session): void {
-  runtime.als.enterWith({ session });
+function shouldWrite(session: RecordSession | ReplaySession, output: string): boolean {
+  const madeCalls = session.recorder.events.some((e) => e.type === 'llm_call' || e.type === 'tool_call');
+  return madeCalls || !existsSync(output);
 }
 
 function outcomeFor(exitCode: number): TapeOutcome {
@@ -54,32 +61,30 @@ function outcomeFor(exitCode: number): TapeOutcome {
 
 /**
  * If this process was launched by `tapedeck record` or `tapedeck replay
- * --against`, starts a session for the rest of the process and writes its
- * tape when the process exits. Runs automatically when the `tapedeck`
- * package is imported, so the app only has to import TapeDeck (which it
- * does anyway to wrap its clients and tools).
+ * --against`, starts a process-wide session and writes its tape when the
+ * process exits. The CLI preloads TapeDeck into the command, so this runs
+ * before any application code; importing `tapedeck` also calls it, which
+ * is a no-op once a session is active.
  *
  * @returns true if a session was started
  */
 export function activateFromEnv(env: NodeJS.ProcessEnv = process.env): boolean {
   const mode = env[ENV.mode];
-  if (!mode) return false;
+  if (!mode || runtime.globalSession) return false;
   const settings = Object.fromEntries(Object.entries(ENV).map(([key, name]) => [key, env[name]])) as Record<
     keyof typeof ENV,
     string | undefined
   >;
-  // Consume the variables so processes spawned by this one are not
-  // recorded into the same file.
-  for (const name of Object.values(ENV)) delete env[name];
-
   const output = settings.output;
   if (!output) throw new Error(`${ENV.mode} is set but ${ENV.output} is missing`);
   installGlobals();
+  installFetchInterceptor();
 
   if (mode === 'record') {
     const session = new RecordSession();
-    enter(session);
+    runtime.globalSession = session;
     onExit((code) => {
+      if (!shouldWrite(session, output)) return;
       writeTapeFile(
         output,
         session.toTape({
@@ -98,8 +103,9 @@ export function activateFromEnv(env: NodeJS.ProcessEnv = process.env): boolean {
       mode: settings.replayMode === 'diff' ? 'diff' : 'strict',
       passthrough: settings.passthrough === '1',
     });
-    enter(session);
+    runtime.globalSession = session;
     onExit((code) => {
+      if (!shouldWrite(session, output)) return;
       session.finish();
       writeTapeFile(output, session.toTape(outcomeFor(code)));
     });
