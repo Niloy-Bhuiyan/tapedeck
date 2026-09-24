@@ -25,3 +25,5 @@ jobs:
       - run: npm test
       # Dogfood: every committed tape must still replay cleanly through the CLI.
       - run: npm run tapedeck -- test examples
+      # Zero-code demo: record an unmodified OpenAI script, replay it offline.
+      - run: npm run example:zero-code
