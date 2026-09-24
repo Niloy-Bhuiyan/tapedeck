@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { parseArgs } from 'node:util';
 import { diffTapes, type DiffOptions } from '../diff/diff.js';
@@ -9,6 +9,7 @@ import { renderDiffReport, renderTapeReport } from '../report/html.js';
 import { readTapeFile } from '../tape/io.js';
 import { EVENT_TYPES, type EventType } from '../tape/schema.js';
 import { VERSION } from '../version.js';
+import { githubAnnotations, markdownSummary, runTapeTests, type TapeTestResult } from './test-runner.js';
 
 export interface CliIO {
   stdout: (text: string) => void;
@@ -29,6 +30,12 @@ Usage:
   tapedeck replay <tape> --against "<command>" [--strict] [--passthrough] [-o <tape>]
       Run a command with every recorded call answered from the tape, then
       diff what it did against the tape. Exits 1 if they differ.
+
+  tapedeck test [paths...] [--update] [--report-dir <dir>] [--markdown <file>]
+      Replay every tape found under the paths (default: current directory)
+      against the command it was recorded with. Exits 1 if any changed.
+      --update re-records the tapes that changed (makes real API calls).
+      On GitHub Actions it also writes a job summary and annotations.
 
   tapedeck diff <tape-a> <tape-b>
       Compare two tapes step by step. Exits 1 if they differ.
@@ -207,6 +214,83 @@ function reportCmd(argv: string[], io: CliIO): number {
   return 0;
 }
 
+function testLine(r: TapeTestResult, io: CliIO): string {
+  const c = palette(io.color);
+  const NL = '\n';
+  const meta = c.dim(`(${r.steps !== undefined ? `${r.steps} steps, ` : ''}${r.durationMs}ms)`);
+  const indent = (text: string) =>
+    text
+      .split(NL)
+      .map((line) => `      ${line}`)
+      .join(NL);
+  switch (r.status) {
+    case 'pass':
+      return `  ${c.green('✓')} ${r.name} ${meta}${NL}`;
+    case 'fail': {
+      const report = r.report ? indent(c.dim(`report: ${r.report}`)) + NL : '';
+      return `  ${c.red('✗')} ${c.bold(r.name)} ${meta}${NL}${indent(r.detail ?? '')}${NL}${report}`;
+    }
+    case 'updated':
+      return `  ${c.yellow('↻')} ${r.name} re-recorded ${meta}${NL}`;
+    case 'skip':
+      return `  ${c.dim('-')} ${r.name} ${c.dim(`skipped: ${r.detail}`)}${NL}`;
+    case 'error':
+      return `  ${c.red('!')} ${c.bold(r.name)}: ${r.detail}${NL}`;
+  }
+}
+
+async function testCmd(argv: string[], io: CliIO): Promise<number> {
+  const { values, positionals } = parseArgs({
+    args: argv,
+    allowPositionals: true,
+    options: {
+      update: { type: 'boolean', short: 'u', default: false },
+      'report-dir': { type: 'string' },
+      markdown: { type: 'string' },
+      ignore: { type: 'string' },
+      json: { type: 'boolean', default: false },
+    },
+  });
+  const paths = positionals.length ? positionals : ['.'];
+  const c = palette(io.color);
+  if (!values.json) {
+    const mode = values.update ? c.yellow(' (update mode: changed tapes are re-recorded)') : '';
+    io.stdout(`${c.bold('TapeDeck')} replaying tapes in ${paths.join(', ')}${mode}\n\n`);
+  }
+
+  const results = await runTapeTests(paths, {
+    update: values.update,
+    diff: parseIgnore(values.ignore),
+    ...(values['report-dir'] ? { reportDir: values['report-dir'] } : {}),
+    ...(values.json ? {} : { onResult: (r: TapeTestResult) => io.stdout(testLine(r, io)) }),
+  });
+  if (results.length === 0) {
+    io.stderr(`tapedeck: no tapes (*.tape.json, *.tape.jsonl) found in ${paths.join(', ')}\n`);
+    return 1;
+  }
+
+  const markdown = markdownSummary(results);
+  if (values.markdown) writeFileSync(values.markdown, markdown);
+  if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, markdown);
+  if (process.env.GITHUB_ACTIONS === 'true') for (const line of githubAnnotations(results)) io.stdout(`${line}\n`);
+
+  const count = (status: TapeTestResult['status']) => results.filter((r) => r.status === status).length;
+  const failed = count('fail') + count('error');
+  if (values.json) {
+    io.stdout(`${JSON.stringify(results, null, 2)}\n`);
+  } else {
+    const parts = [
+      c.green(`${count('pass')} passed`),
+      failed ? c.red(`${failed} failed`) : '',
+      count('updated') ? c.yellow(`${count('updated')} updated`) : '',
+      count('skip') ? c.dim(`${count('skip')} skipped`) : '',
+    ].filter(Boolean);
+    io.stdout(`\nTapes: ${parts.join(', ')}\n`);
+    if (failed && !values.update) io.stdout(c.dim('Intended change? Re-record with: tapedeck test --update\n'));
+  }
+  return failed ? 1 : 0;
+}
+
 /** Runs the CLI and returns the process exit code. */
 export async function main(argv: string[], io: CliIO): Promise<number> {
   const [command, ...rest] = argv;
@@ -220,6 +304,8 @@ export async function main(argv: string[], io: CliIO): Promise<number> {
         return diffCmd(rest, io);
       case 'report':
         return reportCmd(rest, io);
+      case 'test':
+        return await testCmd(rest, io);
       case '-v':
       case '--version':
         io.stdout(`${VERSION}\n`);
