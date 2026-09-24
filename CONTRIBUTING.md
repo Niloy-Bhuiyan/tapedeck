@@ -32,12 +32,13 @@ npx vitest tests/diff                     # run one area's tests in watch mode
 | ---- | ---------------- |
 | `src/tape/` | Tape format types, stable IDs, validation, JSON/JSONL I/O. |
 | `src/runtime/` | Sessions (record/replay), async scoping, patched `Date`/`Math.random`, env activation. |
-| `src/interceptors/` | `wrapOpenAI`, `wrapAnthropic`, `wrapClient`, `tool`. |
+| `src/interceptors/` | Network-level capture (`fetch.ts`) and `wrapOpenAI`, `wrapAnthropic`, `wrapClient`, `tool`. |
 | `src/diff/` | Deep JSON diff and tape alignment. |
 | `src/format/`, `src/report/` | Terminal and HTML rendering. |
-| `src/cli/`, `src/process.ts` | The `tapedeck` command and child-process plumbing. |
+| `src/cli/`, `src/process.ts`, `src/register.ts` | The `tapedeck` command (incl. the `test` runner), the preload, and child-process plumbing. |
 | `src/testing/` | `replayTape`, `toMatchTape`, Vitest/Jest registration. |
 | `src/mock/` | Deterministic fake providers (`// MOCK:`). |
+| `examples/zero-code/` | Unmodified OpenAI script recorded from the outside. |
 | `examples/research-agent/` | Demo agent and its committed tape (also a test fixture). |
 | `docs/tape-format.md` | The tape specification. |
 
