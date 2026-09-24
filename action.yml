@@ -1,0 +1,67 @@
+name: TapeDeck
+description: Replay recorded agent tapes on every pull request and report exactly where agent behaviour changed.
+author: Niloy Bhuiyan
+branding:
+  icon: film
+  color: orange
+
+inputs:
+  paths:
+    description: Space-separated files or directories to search for *.tape.json / *.tape.jsonl files.
+    default: .
+  args:
+    description: Extra arguments for `tapedeck test`, e.g. `--ignore clock_read`.
+    default: ''
+  comment:
+    description: When tapes diverge on a pull request, post (or update) a summary comment. Needs `pull-requests: write`.
+    default: 'true'
+  report-dir:
+    description: Directory for HTML diff reports of failing tapes, uploaded as the `tapedeck-reports` artifact.
+    default: tapedeck-reports
+  github-token:
+    description: Token used to comment on the pull request.
+    default: ${{ github.token }}
+
+outputs:
+  exit-code:
+    description: Exit code of `tapedeck test` (0 = all tapes match).
+    value: ${{ steps.test.outputs.exit-code }}
+
+runs:
+  using: composite
+  steps:
+    - id: test
+      name: Replay tapes
+      shell: bash
+      env:
+        TAPEDECK_PATHS: ${{ inputs.paths }}
+        TAPEDECK_ARGS: ${{ inputs.args }}
+        TAPEDECK_REPORT_DIR: ${{ inputs.report-dir }}
+      run: |
+        set +e
+        # tapedeck must be installed in the project (npm install --save-dev tapedeck).
+        npx --no-install tapedeck test $TAPEDECK_PATHS --report-dir "$TAPEDECK_REPORT_DIR" --markdown "$RUNNER_TEMP/tapedeck-summary.md" $TAPEDECK_ARGS
+        echo "exit-code=$?" >> "$GITHUB_OUTPUT"
+
+    - name: Upload diff reports
+      if: steps.test.outputs.exit-code != '0'
+      uses: actions/upload-artifact@v4
+      with:
+        name: tapedeck-reports
+        path: ${{ inputs.report-dir }}
+        if-no-files-found: ignore
+
+    - name: Comment on the pull request
+      if: steps.test.outputs.exit-code != '0' && inputs.comment == 'true' && github.event_name == 'pull_request'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+      run: |
+        body="$RUNNER_TEMP/tapedeck-summary.md"
+        gh pr comment "$PR_NUMBER" --body-file "$body" --edit-last 2>/dev/null || gh pr comment "$PR_NUMBER" --body-file "$body" || true
+
+    - name: Fail if tapes diverged
+      if: steps.test.outputs.exit-code != '0'
+      shell: bash
+      run: exit ${{ steps.test.outputs.exit-code }}
