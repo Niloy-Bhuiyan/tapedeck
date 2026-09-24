@@ -29,6 +29,33 @@ function describeLlmResponse(response: Json | undefined): string {
   return `→ ${preview(response)}`;
 }
 
+/**
+ * Reassembles text and tool-call names from streamed chunks: SDK chunk
+ * objects, or SSE frames (`{ event?, data }`) captured at the fetch level.
+ */
+function describeStream(response: Json | undefined): string {
+  const items = asArray(response);
+  let text = '';
+  const tools: string[] = [];
+  for (const item of items) {
+    const data = isObj(item) && 'data' in item ? item.data : item;
+    if (!isObj(data)) continue;
+    // OpenAI: { choices: [{ delta: { content, tool_calls } }] }
+    const choice = asArray(data.choices)[0];
+    const delta = isObj(choice) && isObj(choice.delta) ? choice.delta : undefined;
+    if (delta && typeof delta.content === 'string') text += delta.content;
+    for (const call of asArray(delta?.tool_calls)) {
+      if (isObj(call) && isObj(call.function) && typeof call.function.name === 'string') tools.push(call.function.name);
+    }
+    // Anthropic: content_block_delta { delta: { text } } / content_block_start { content_block: tool_use }
+    if (isObj(data.delta) && typeof data.delta.text === 'string') text += data.delta.text;
+    if (isObj(data.content_block) && data.content_block.type === 'tool_use') tools.push(String(data.content_block.name));
+  }
+  if (tools.length) return `→ tool calls: ${tools.join(', ')} (streamed)`;
+  if (text) return `→ ${preview(text)} (streamed)`;
+  return `→ ${items.length} streamed chunks`;
+}
+
 /** One-line, human-oriented description of an event's content. */
 export function summarizeEvent(event: TapeEvent): string {
   switch (event.type) {
@@ -37,7 +64,7 @@ export function summarizeEvent(event: TapeEvent): string {
       const outcome = event.error
         ? `✗ ${event.error.name}: ${event.error.message}`
         : event.stream
-          ? `→ ${asArray(event.response).length} streamed chunks`
+          ? describeStream(event.response)
           : describeLlmResponse(event.response);
       return `${event.provider} ${event.operation}${model} ${outcome}`;
     }

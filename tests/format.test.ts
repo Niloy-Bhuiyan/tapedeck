@@ -41,6 +41,23 @@ describe('summarizeEvent', () => {
     expect(summarizeEvent(ev)).toBe('anthropic messages.create model=claude-x → "Hi there"');
   });
 
+  it('reassembles streamed text and tool calls', () => {
+    const rec = new TapeRecorder(() => 0);
+    const base = { type: 'llm_call', provider: 'openai', operation: 'op', request: {}, stream: true, durationMs: 1 } as const;
+    const openaiText = rec.append({
+      ...base,
+      response: [{ data: { choices: [{ delta: { content: 'Hel' } }] } }, { data: { choices: [{ delta: { content: 'lo' } }] } }, { data: '[DONE]' }],
+    });
+    expect(summarizeEvent(openaiText)).toBe('openai op → "Hello" (streamed)');
+    const anthropicTool = rec.append({
+      ...base,
+      provider: 'anthropic',
+      response: [{ event: 'content_block_start', data: { content_block: { type: 'tool_use', name: 'search' } } }],
+    });
+    expect(summarizeEvent(anthropicTool)).toBe('anthropic op → tool calls: search (streamed)');
+    expect(summarizeEvent(rec.append({ ...base, response: [{ data: 'ping' }] }))).toBe('openai op → 1 streamed chunks');
+  });
+
   it('describes errors, clocks and draws', () => {
     const rec = new TapeRecorder(() => 0);
     const failed = rec.append({
