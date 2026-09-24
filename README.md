@@ -4,45 +4,58 @@
 
 **VCR for AI agents — record once, replay debugging for free.**
 
-TapeDeck records every LLM call, tool call, tool result, clock read and
-random draw your agent makes into a portable **tape**. Replay the tape later
-with **zero API cost** and **no network**, standalone or against *new* agent
-code, and diff the two runs to see exactly where behaviour changed.
+Record every LLM call, tool call, clock read and random draw your agent
+makes into a portable **tape**. Replay it later with **zero API cost and no
+network** — standalone, or against your *new* code — and see exactly which
+step changed. **No code changes needed.**
+
+```bash
+npx tapedeck record -- node agent.js                 # run once for real
+npx tapedeck replay tape.json --against "node agent.js"   # re-run free, offline, and diff
+```
 
 <!-- TODO: record and embed a demo GIF here -->
 
 ```text
-$ npx tapedeck replay tapes/research-agent.tape.json --against "node agent.js"
-
-  ✓  7  tool_result  web_search → [{"title":"Delhi – population and area",…
-  ~  8  llm_call     openai chat.completions.create model=gpt-4.1-mini → tool calls: calculator
-        │ request.messages[3].content: "[{\"title\":\"Tokyo – population…" → "- Tokyo metropolis: population 14,094,034…"
-  ✓  9  tool_call    calculator({"expression":"(14094034 + 16787941) / (2194 + 1484)"})
-
 Tapes diverge at step 8 of 12.
-Step 8: LLM call (openai chat.completions.create) was sent a different request:
+Step 8: LLM call (openai POST /v1/chat/completions) was sent a different request:
   - request.messages[3].content: "[{\"title\":\"Tokyo – population…" → "- Tokyo metropolis: …"
 ```
 
 ## Why
 
-Agents are hard to test: every run costs money, takes seconds, and never
-does quite the same thing twice. TapeDeck makes a run *deterministic and
-free to repeat*:
+Agents are hard to test. Every run costs money, takes seconds, and never
+does quite the same thing twice, so a "small prompt tweak" can quietly
+change which tools get called and nobody notices until production.
 
-- **Record** a real run once — LLM requests and responses, tool inputs and
-  outputs, `Date.now()` / `new Date()`, `Math.random()`.
-- **Replay** it any number of times offline. The code gets the exact same
-  responses, the exact same clock, the exact same random numbers.
-- **Diff** a replay of *new* code against the tape to catch regressions:
-  different tool calls, different arguments, different prompts, different
-  outcomes — with the first point of divergence explained in plain English.
-- **Test** it in CI: `expect(await replayTape('./tapes/checkout.tape.json')).toMatchTape()`.
+TapeDeck turns one real run into a **free, deterministic, repeatable test**:
 
-Works with the official [`openai`](https://www.npmjs.com/package/openai) and
-[`@anthropic-ai/sdk`](https://www.npmjs.com/package/@anthropic-ai/sdk)
-clients, any tool function, and any test runner with Jest-style matchers.
-Zero runtime dependencies.
+- 🎬 **Record anything that talks to an LLM over `fetch`.** The official
+  OpenAI and Anthropic SDKs, Vercel AI SDK, LangChain.js, Gemini, Mistral,
+  Groq, OpenRouter, Ollama… with no wrappers and no code changes.
+- ⏪ **Replay offline, byte for byte.** Same responses (streams included),
+  same `Date.now()`, same `Math.random()`. Rate-limit retries replay
+  instantly.
+- 🔍 **Pinpoint regressions.** Replay a tape against new code and get the
+  first point of divergence in plain English: which step, which field, old
+  value → new value.
+- ✅ **Gate pull requests.** `tapedeck test` replays every tape in the repo;
+  the GitHub Action comments on the PR when agent behaviour changes.
+- 🔒 **Safe to commit.** API keys never touch the tape; well-known secrets
+  are scrubbed automatically; add your own patterns with `--redact`.
+
+## Try it in 10 seconds
+
+```bash
+git clone https://github.com/Niloy-Bhuiyan/tapedeck && cd tapedeck
+npm install
+npm run example:zero-code
+```
+
+This records an ordinary OpenAI streaming script
+([`examples/zero-code/agent.mjs`](examples/zero-code/agent.mjs) — no TapeDeck
+code in it), **switches the API server off**, replays the script identically,
+then shows the diff when the prompt changes. No API key needed.
 
 ## Install
 
@@ -50,143 +63,159 @@ Zero runtime dependencies.
 npm install --save-dev tapedeck
 ```
 
-Until the first npm release, install from GitHub (the `prepare` script
-builds it):
-
-```bash
-npm install --save-dev github:Niloy-Bhuiyan/tapedeck
-```
-
-Requires Node.js 22+. TapeDeck is an ES module.
+Until the first npm release: `npm install --save-dev github:Niloy-Bhuiyan/tapedeck`
+(the `prepare` script builds it). Requires Node.js 22+.
 
 ## Quickstart
 
-### 1. Wrap your client and tools
-
-```ts
-import OpenAI from 'openai';
-import { tool, wrapOpenAI } from 'tapedeck';
-
-const openai = wrapOpenAI(new OpenAI()); // same API as before
-const search = tool('web_search', async ({ query }: { query: string }) => mySearchApi(query));
-```
-
-`wrapAnthropic(new Anthropic())` does the same for Claude. Outside a
-recording or replay the wrappers are pass-throughs.
-
-### 2a. Record and replay from the CLI
+### 1. Record a real run
 
 ```bash
-# Run your agent for real and record everything it did
+export OPENAI_API_KEY=sk-...
 npx tapedeck record -o tapes/checkout.tape.json -- node agent.js
-
-# Look at the tape (runs nothing, costs nothing)
-npx tapedeck replay tapes/checkout.tape.json
-
-# Replay the tape against your current code and diff the runs
-npx tapedeck replay tapes/checkout.tape.json --against "node agent.js"
-
-# Compare any two tapes, or render one as an HTML timeline
-npx tapedeck diff tapes/before.tape.json tapes/after.tape.json
-npx tapedeck report tapes/checkout.tape.json --diff tapes/after.tape.json -o report.html
 ```
 
-### 2b. …or in code
+Any Node.js command works (`node`, `npx tsx`, `npm run …`). Calls to
+well-known LLM APIs are recorded automatically; add others with
+`--llm-host localhost:11434`, and record non-LLM HTTP APIs your tools call
+(search, weather…) with `--http-host api.tavily.com`.
 
-```ts
-import { record, replay, writeTapeFile } from 'tapedeck';
+### 2. Replay it for free
 
-const { tape } = await record(() => agent.run('Buy socks'), { name: 'checkout' });
-writeTapeFile('tapes/checkout.tape.json', tape);
-
-const result = await replay('tapes/checkout.tape.json', () => agent.run('Buy socks'));
-result.ok;                          // true if behaviour is unchanged
-result.diff.summary;                // "Tapes diverge at step 4 of 9. …"
+```bash
+npx tapedeck replay tapes/checkout.tape.json                        # view the timeline
+npx tapedeck replay tapes/checkout.tape.json --against "node agent.js"   # re-run & diff
+npx tapedeck report tapes/checkout.tape.json -o report.html         # visual timeline
 ```
 
-### 3. Regression-test it in CI (Vitest)
+Replays need no API key and make no network calls to recorded hosts.
+
+### 3. Make it a regression test
+
+```bash
+npx tapedeck test tapes/          # replays every tape; exits 1 if any changed
+npx tapedeck test tapes/ --update # intended change? re-record the ones that changed
+```
+
+In GitHub Actions (details in [docs/github-action.md](docs/github-action.md)):
+
+```yaml
+- run: npm ci
+- uses: Niloy-Bhuiyan/tapedeck@main
+  with:
+    paths: tapes
+```
+
+Failing tapes get an inline annotation, a job summary, a PR comment and an
+HTML diff report artifact.
+
+### Or from your test runner
 
 ```ts
 import { expect, test } from 'vitest';
 import { replayTape } from 'tapedeck/vitest'; // registers toMatchTape()
 
 test('checkout flow still behaves as recorded', async () => {
-  // Re-runs the command the tape was recorded with, fully offline.
   expect(await replayTape('./tapes/checkout.tape.json')).toMatchTape();
 });
-
-test('in-process variant', async () => {
-  expect(await replayTape('./tapes/checkout.tape.json', () => agent.run('Buy socks'))).toMatchTape();
-});
 ```
 
-For Jest, add `tapedeck/jest` to `setupFilesAfterEnv` (Jest must run in ESM
-mode), or call `expect.extend(tapeMatchers)` yourself with
-`import { tapeMatchers } from 'tapedeck/testing'`. A failing match prints the
-full step-by-step diff. Relax it with e.g.
-`toMatchTape({ ignoreTypes: ['clock_read'] })`.
+For Jest add `tapedeck/jest` to `setupFilesAfterEnv` (ESM mode). Relax a
+match with `toMatchTape({ ignorePaths: ['request.metadata.trace_id'] })`.
 
-### Try the example
+## In-process API
 
-The repo includes a small tool-calling research agent with a pre-recorded
-tape. It runs offline out of the box:
+For unit tests or finer control, record and replay a function directly:
 
-```bash
-git clone https://github.com/Niloy-Bhuiyan/tapedeck && cd tapedeck
-npm install
-npm run example             # run the agent (mock model, no API key needed)
-npm run example:replay      # replay its tape against the code → match
-npm run example:regression  # replay against a "refactored" v2 → diverges at step 8
+```ts
+import OpenAI from 'openai';
+import { record, replay, tool, writeTapeFile } from 'tapedeck';
+
+const openai = new OpenAI();                        // intercepted via fetch
+const search = tool('web_search', mySearchFn);      // optional: record a tool call explicitly
+
+const { tape } = await record(() => agent.run('Buy socks'), { name: 'checkout' });
+writeTapeFile('tapes/checkout.tape.json', tape);
+
+const result = await replay('tapes/checkout.tape.json', () => agent.run('Buy socks'));
+result.ok;           // true if behaviour is unchanged
+result.diff.summary; // "Tapes diverge at step 4 of 9. …"
 ```
 
-See [examples/research-agent](examples/research-agent/README.md).
+Import `tapedeck` before creating SDK clients (SDKs capture `fetch` when
+constructed). Prefer explicit wrappers? `wrapOpenAI(client)` and
+`wrapAnthropic(client)` record at the SDK level instead, with the same
+replay guarantees.
 
-## Architecture
+## How it works
 
 ```mermaid
 flowchart LR
-  subgraph App["Your agent process"]
+  subgraph App["Your agent process (unmodified)"]
     Code["Agent code"]
-    W["wrapOpenAI / wrapAnthropic / tool()"]
-    G["Patched Date & Math.random"]
-    Code --> W
-    Code --> G
+    SDK["OpenAI / Anthropic / AI SDK / LangChain…"]
+    Code --> SDK
   end
 
-  W --> S{"Active session<br/>(AsyncLocalStorage)"}
+  Pre["tapedeck preload<br/>(NODE_OPTIONS --import)"] -. patches .-> F["fetch"]
+  Pre -. patches .-> G["Date · Math.random"]
+  SDK --> F
+  Code --> G
+
+  F --> S{"Session"}
   G --> S
 
-  S -- "record" --> R["RecordSession<br/>performs real calls"]
-  R --> API[("LLM APIs<br/>& real tools")]
-  R --> T[["Tape<br/>.tape.json / .tape.jsonl"]]
+  S -- "record" --> R["perform for real"]
+  R --> API[("LLM APIs")]
+  R --> T[["Tape<br/>(secrets redacted)"]]
 
-  T --> P["ReplaySession<br/>answers from the tape"]
-  S -- "replay" --> P
-  P --> T2[["Replay tape<br/>(what the new code did)"]]
+  S -- "replay" --> P["answer from tape"]
+  T --> P
+  P --> T2[["Replay tape"]]
 
-  T --> D["Diff engine<br/>LCS alignment + field diff"]
+  T --> D["Diff engine"]
   T2 --> D
-  D --> Out["CLI text · JSON · HTML report · toMatchTape()"]
+  D --> Out["CLI · HTML report · PR comment · toMatchTape()"]
 ```
 
-- **Interceptors** (`src/interceptors`) route SDK calls and tool calls to
-  the active session. A `Proxy` keeps the rest of the SDK untouched.
-- **Runtime** (`src/runtime`) holds the sessions. `AsyncLocalStorage` scopes a
-  session to one `record()` / `replay()` callback — or, under the CLI, to the
-  whole process — so concurrent tests never mix. Real SDK and tool calls run
-  with capture suspended, since they are replayed as a whole.
-- **Tape** (`src/tape`) defines the format, stable content-derived event IDs,
-  validation, and JSON/JSONL I/O. Spec: [docs/tape-format.md](docs/tape-format.md).
-- **Replay** matches each kind of event in recorded order. Strict mode throws
-  at the first mismatched call; diff mode records every divergence and keeps
-  going. Recorded errors are re-thrown faithfully.
-- **Diff** (`src/diff`) aligns two tapes step by step and explains the first
-  divergence. **Format** and **report** render it for terminals and browsers.
-- **CLI** (`src/cli`) spawns your command with a few environment variables;
-  importing `tapedeck` in that process picks them up and records or replays.
+- **Capture.** The CLI preloads TapeDeck into every Node process the command
+  starts. It patches `fetch` (calls to LLM hosts become `llm_call` events,
+  with the JSON request/response or the raw SSE stream) and `Date` /
+  `Math.random` (only reads made by *your* code — library internals such as
+  SDK retry jitter are left alone, so tapes survive dependency upgrades).
+- **Replay.** Each kind of event is answered in recorded order. Responses are
+  rebuilt as real `Response` objects, so the SDK's own parsing and streaming
+  code runs unchanged. Strict mode stops at the first mismatch; diff mode
+  records every divergence and keeps going.
+- **Diff.** Tapes are aligned step by step (LCS), compared field by field, and
+  the first divergence is explained in plain English.
 
-More detail and the reasoning behind these choices:
-[DESIGN_NOTES.md](DESIGN_NOTES.md).
+Design details and trade-offs: [DESIGN_NOTES.md](DESIGN_NOTES.md). Tape
+specification: [docs/tape-format.md](docs/tape-format.md).
+
+## CLI reference
+
+| Command | What it does | Exit code |
+| ------- | ------------ | --------- |
+| `tapedeck record [-o tape] [-n name] -- <command…>` | Run a Node.js command for real and record it. | The command's |
+| `tapedeck replay <tape>` | Print the tape as a timeline. Runs nothing. | 0 |
+| `tapedeck replay <tape> --against "<command>"` | Run the command against the tape and diff. | 0 match, 1 differ |
+| `tapedeck test [paths…] [--update]` | Replay every tape against its recorded command. | 0 all match, 1 otherwise |
+| `tapedeck diff <a> <b>` | Compare two tapes. | 0 match, 1 differ |
+| `tapedeck report <tape> [--diff <b>] [-o file.html]` | Self-contained HTML timeline or diff. | 0 |
+
+Common options:
+
+| Option | Meaning |
+| ------ | ------- |
+| `--llm-host <host>` | Treat another host as an LLM API (e.g. `localhost:11434`). Saved on the tape. |
+| `--http-host <host>` | Record calls to a non-LLM API as tool events. Saved on the tape. |
+| `--redact <regex>` | Scrub more patterns from tapes (API keys and tokens are always scrubbed). |
+| `--ignore-path <path>` | Ignore a noisy field, e.g. `request.metadata.trace_id`, `request.messages[*].name`, `**.request_id`. |
+| `--ignore <types>` | Leave event types out of diffs, e.g. `clock_read,random_draw`. |
+| `--strict` | Stop at the first divergence instead of reporting all of them. |
+| `--passthrough` | Perform calls the tape can't answer for real (costs money). |
+| `--json` | Machine-readable output. |
 
 ## What a tape looks like
 
@@ -195,73 +224,64 @@ More detail and the reasoning behind these choices:
   "format": "tapedeck.tape",
   "version": 1,
   "id": "903da1a8-83fb-4941-bc8c-57f06fb21c0e",
-  "name": "research-agent",
-  "createdAt": "2026-09-23T20:41:25.143Z",
-  "metadata": { "command": "node --import tsx examples/research-agent/main.ts", "tapedeckVersion": "0.1.0" },
+  "name": "checkout",
+  "createdAt": "2026-09-24T10:00:00.000Z",
+  "metadata": { "command": "node agent.js", "tapedeckVersion": "0.2.0" },
   "events": [
-    { "id": "clock_read:b93964f9:0", "seq": 0, "t": 37, "type": "clock_read", "source": "Date.now", "value": 1790196085179 },
-    { "id": "llm_call:e5b9eae2:0", "seq": 2, "t": 37, "type": "llm_call", "provider": "openai",
-      "operation": "chat.completions.create", "request": { "model": "gpt-4.1-mini", "messages": [ … ] },
-      "response": { "choices": [ … ] }, "durationMs": 1 },
-    { "id": "tool_call:c826a7b5:0", "seq": 3, "t": 38, "type": "tool_call", "tool": "web_search",
-      "callId": "tool_call:c826a7b5:0", "args": { "query": "tokyo population and area" } }
+    { "id": "clock_read:b93964f9:0", "seq": 0, "t": 3, "type": "clock_read", "source": "new Date", "value": 1790244000003 },
+    { "id": "llm_call:e5b9eae2:0", "seq": 1, "t": 4, "type": "llm_call", "provider": "openai",
+      "operation": "POST /v1/chat/completions",
+      "request": { "model": "gpt-4.1-mini", "stream": true, "messages": [ … ] },
+      "response": [ { "data": { "choices": [ { "delta": { "content": "Hi" } } ] } }, { "data": "[DONE]" } ],
+      "stream": true, "http": { "status": 200, "headers": { "content-type": "text/event-stream" } }, "durationMs": 812 }
   ],
   "outcome": { "status": "ok", "exitCode": 0 }
 }
 ```
 
 Event types: `llm_call`, `tool_call`, `tool_result`, `clock_read`,
-`random_draw`. Full specification: [docs/tape-format.md](docs/tape-format.md).
-
-## CLI reference
-
-| Command | What it does | Exit code |
-| ------- | ------------ | --------- |
-| `tapedeck record [-o tape] [-n name] -- <command…>` | Run the command for real and record it. | The command's |
-| `tapedeck replay <tape> [--json]` | Print the tape as a timeline. Runs nothing. | 0 |
-| `tapedeck replay <tape> --against "<command>" [--strict] [--passthrough] [-o tape] [--ignore types] [--json]` | Run the command against the tape and diff. | 0 match, 1 differ |
-| `tapedeck diff <a> <b> [--ignore types] [--json]` | Compare two tapes. | 0 match, 1 differ |
-| `tapedeck report <tape> [--diff <b>] [-o file.html]` | Write a self-contained HTML timeline or diff. | 0 |
-
-`--ignore` takes comma-separated event types, e.g.
-`--ignore clock_read,random_draw`. `--passthrough` performs calls the tape
-cannot answer for real (this costs money). The recorded program must import
-`tapedeck` (it does if it uses the wrappers) — that is how it connects to the
-CLI.
+`random_draw`. Tapes are plain JSON (or JSONL), readable in code review.
 
 ## API at a glance
 
 | Export | Purpose |
 | ------ | ------- |
-| `wrapOpenAI(client)`, `wrapAnthropic(client)`, `wrapClient(client, provider, ops)` | Intercept SDK calls. |
-| `tool(name, fn)` | Intercept a tool. |
-| `record(fn, opts?)` | Run `fn` for real and return `{ ok, result \| error, tape }`. |
-| `replay(tape, fn, { mode, passthrough, diff }?)` | Run `fn` against a tape; returns `{ ok, result, divergences, diff, actual, expected }`. |
-| `diffTapes(a, b, { ignoreTypes, ignoreOutcome }?)` | Structured diff with `steps`, `firstDivergence`, `summary`. |
-| `recordCommand`, `replayCommand` | Programmatic versions of the CLI. |
+| `record(fn, opts?)` / `replay(tape, fn, opts?)` | In-process record and replay. |
+| `recordCommand`, `replayCommand`, `runTapeTests` | Programmatic CLI. |
+| `diffTapes(a, b, { ignoreTypes, ignorePaths }?)` | Structured diff with `steps`, `firstDivergence`, `summary`. |
+| `tool(name, fn)`, `wrapOpenAI`, `wrapAnthropic`, `wrapClient` | Explicit, SDK-level interception. |
+| `configureFetchInterception({ llmHosts, httpHosts })` | Add hosts for fetch-level capture. |
 | `readTapeFile`, `writeTapeFile`, `parseTape`, `validateTape` | Tape I/O. |
 | `formatTimeline`, `formatDiff`, `renderTapeReport`, `renderDiffReport` | Rendering. |
-| `replayTape`, `tapeMatchers` (`tapedeck/testing`, `tapedeck/vitest`, `tapedeck/jest`) | Test integration. |
-| `MockOpenAI`, `MockAnthropic` | Deterministic offline providers for tests. |
+| `replayTape`, `tapeMatchers` (`tapedeck/vitest`, `tapedeck/jest`, `tapedeck/testing`) | Test-runner integration. |
+| `MockOpenAI`, `MockAnthropic` | Deterministic offline providers for your own tests. |
 
-## API keys and mocks
+## Examples
 
-Nothing needs a key to run: tests, the CLI and the example use deterministic
-mock providers when `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` are unset (see
-[.env.example](.env.example)). Replays never call the API even when keys are
-set. What is mocked and how to switch to real providers:
-[MOCKED_COMPONENTS.md](MOCKED_COMPONENTS.md).
+- [`examples/zero-code`](examples/zero-code) — an unmodified OpenAI
+  streaming script, recorded and replayed from the outside.
+- [`examples/research-agent`](examples/research-agent/README.md) — a
+  tool-calling agent with a committed tape, a deliberate regression
+  (`npm run example:regression`), and this repo's own end-to-end fixture.
+
+Everything runs offline: the examples use a mock model or a fake local
+OpenAI server when no key is set ([MOCKED_COMPONENTS.md](MOCKED_COMPONENTS.md)).
 
 ## Limitations
 
-- Streams are recorded by buffering and replayed as plain async iterables.
-- Intercepted SDK methods return plain Promises (no `.withResponse()`).
-- `performance.now()` and `crypto` randomness are not captured yet.
+- Node.js only for now (Python is the most-requested next step — see
+  [ISSUES_TODO.md](ISSUES_TODO.md)).
+- Captures `fetch`. Clients built on `node:http` directly (e.g. axios) need
+  the explicit wrappers or `tool()`.
+- Streams are buffered while *recording* (the caller receives them after the
+  response completes); replay is exact.
+- `performance.now()` and `crypto.randomUUID()` are not captured; use
+  `--ignore-path` for fields that carry them.
 
 ## Contributing
 
-Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md), and
-[ISSUES_TODO.md](ISSUES_TODO.md) for good first issues.
+Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) and the
+good first issues in [ISSUES_TODO.md](ISSUES_TODO.md).
 
 ## License
 
