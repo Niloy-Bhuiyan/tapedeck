@@ -25,9 +25,13 @@ and are exported from the package as `Tape`, `TapeEvent`, etc.
   "name": "checkout-flow",          // optional human label
   "createdAt": "2026-09-23T10:00:00.000Z",
   "metadata": {                     // free-form; well-known keys below
-    "tapedeckVersion": "0.1.0",
+    "tapedeckVersion": "0.2.0",
     "command": "node agent.js",     // set by `tapedeck record -- <command>`
     "node": "v22.4.0",
+    "llmHosts": ["localhost:11434"],        // --llm-host: extra hosts captured as LLM calls
+    "httpHosts": ["api.tavily.com"],        // --http-host: hosts captured as http tools
+    "redact": ["[\w.]+@example\.com"],     // --redact: extra patterns scrubbed from the tape
+    "ignorePaths": ["request.metadata"],    // --ignore-path: fields ignored when replaying/diffing
     "replay": { … }                 // only on tapes produced by a replay run
   },
   "events": [ … ],                  // ordered, see below
@@ -57,16 +61,22 @@ though its response arrived later.
 
 ### `llm_call`
 
-A call to an LLM SDK method.
+A call to an LLM API, captured one of two ways:
+
+- **Network level** (default; no code changes): a `fetch` to a known LLM
+  host. `operation` is `<METHOD> <path>` and the event carries `http`.
+- **SDK level** (`wrapOpenAI` / `wrapAnthropic` / `wrapClient`): a call to
+  an SDK method. `operation` is the method path.
 
 | Field        | Type    | Notes |
 | ------------ | ------- | ----- |
-| `provider`   | string  | `openai`, `anthropic`, `mock`, … |
-| `operation`  | string  | SDK method path, e.g. `chat.completions.create`, `messages.create`. |
-| `request`    | JSON    | The request body (first argument). Per-request options such as `signal` or `timeout` are not recorded. |
-| `response`   | JSON    | The response object. For `stream: true` calls, the array of chunks. |
+| `provider`   | string  | `openai`, `anthropic`, `google`, …, or the host itself for `--llm-host` hosts. |
+| `operation`  | string  | `POST /v1/chat/completions` (network level; secret-looking query values redacted) or `chat.completions.create` (SDK level). |
+| `request`    | JSON    | The request body. Request **headers are never recorded**, and neither are per-request SDK options such as `signal`. |
+| `response`   | JSON    | The response body (network level) or object (SDK level). For streams: the list of server-sent events `{ event?, data }` (network level, `data` parsed as JSON when possible) or of SDK chunks (SDK level). |
 | `stream`     | boolean | Present and `true` for streamed calls. |
-| `error`      | object  | `{ name, message, status?, code? }` when the call threw. Replay re-throws it. |
+| `http`       | object  | Network level only: `{ status, headers }`, where `headers` keeps only `content-type`, `retry-after` and `retry-after-ms`. |
+| `error`      | object  | `{ name, message, status?, code? }` when the call threw (e.g. a network error). HTTP error statuses are ordinary responses with `http.status` ≥ 400. |
 | `durationMs` | number  | Real latency during recording. |
 
 ID inputs: `provider`, `operation`, `request`.
@@ -75,6 +85,10 @@ ID inputs: `provider`, `operation`, `request`.
 
 A call to a function wrapped with `tool(name, fn)`, split into the call
 (what the agent asked for) and the result (what it got back).
+
+Calls to hosts given with `--http-host` are recorded as tools too, named
+`http <host>`, with `args: { method, url, body }` and
+`result: { status, headers, body, stream? }`.
 
 | Field        | Type   | Notes |
 | ------------ | ------ | ----- |
@@ -89,7 +103,10 @@ ID inputs: `tool` + `args` for calls, `tool` + `callId` for results.
 
 ### `clock_read`
 
-The code read the current time.
+The application read the current time. Only reads made directly by
+application code are recorded — not reads inside `node_modules` (SDK retry
+logic, loaders), which run for real on replay. This keeps tapes stable
+across dependency upgrades.
 
 | Field    | Type   | Notes |
 | -------- | ------ | ----- |
@@ -98,7 +115,7 @@ The code read the current time.
 
 ### `random_draw`
 
-The code called `Math.random()`.
+Application code called `Math.random()` (same rule as `clock_read`).
 
 | Field   | Type   | Notes |
 | ------- | ------ | ----- |
@@ -106,12 +123,21 @@ The code called `Math.random()`.
 
 ## What is *not* captured
 
-- Clock reads and random draws made **inside** an LLM SDK call or a wrapped
-  tool. Those calls are replayed as a whole, so their internals never run
-  on replay and must not appear on the tape.
+- Clock reads and random draws made inside dependencies (see above), inside
+  a wrapped tool, or inside an SDK-level wrapped call.
 - `performance.now()`, `crypto.randomUUID()`, `crypto.getRandomValues()`,
-  file-system reads and raw `fetch` calls. Wrap such dependencies with
-  `tool()` if the agent's behaviour depends on them.
+  file-system reads, and `fetch` calls to hosts that are neither known LLM
+  APIs nor listed with `--llm-host` / `--http-host`. Wrap such dependencies
+  with `tool()` if the agent's behaviour depends on them, or ignore the
+  fields they affect with `ignorePaths`.
+
+## Redaction
+
+Before a tape is written, every string in it is scanned and well-known
+credential formats (OpenAI/Anthropic/Google API keys, AWS access key IDs,
+GitHub and Slack tokens, bearer tokens) are replaced with `[REDACTED]`,
+along with any patterns in `metadata.redact`. On replay, live requests are
+redacted the same way before being compared with the tape.
 
 ## Replay metadata
 
