@@ -133,6 +133,8 @@ export interface TapeMetadata {
   httpHosts?: string[];
   /** Extra redaction patterns (regex sources) applied when recording, reapplied on replay. */
   redact?: string[];
+  /** Field paths ignored when this tape is replayed or diffed (`--ignore-path`). */
+  ignorePaths?: string[];
   /** Set on tapes produced by a replay run. */
   replay?: ReplayMetadata;
   [key: string]: Json | ReplayMetadata | undefined;

@@ -1,6 +1,6 @@
 import type { EventType, Json, Tape, TapeEvent, TapeOutcome } from '../tape/schema.js';
 import { toJson } from '../tape/json.js';
-import { deepDiff, describeChange, type FieldChange } from './deep.js';
+import { deepDiff, describeChange, pathMatcher, type FieldChange } from './deep.js';
 
 export type StepStatus = 'match' | 'changed' | 'added' | 'removed';
 
@@ -41,6 +41,13 @@ export interface DiffOptions {
   ignoreTypes?: EventType[];
   /** Skip comparing how the two runs ended. */
   ignoreOutcome?: boolean;
+  /**
+   * Field paths to leave out of comparisons, with wildcards (see pathMatcher),
+   * e.g. `request.metadata.trace_id` or `request.messages[*].name`. Paths are
+   * relative to each event (`request`, `response`, `args`, `result`, …)
+   * or, for the outcome, to the outcome (`value`, `exitCode`, …).
+   */
+  ignorePaths?: string[];
 }
 
 export function alignmentKey(event: TapeEvent): string {
@@ -149,17 +156,20 @@ function outcomePayloads(a: TapeOutcome | undefined, b: TapeOutcome | undefined)
 /** Compares tape `a` (the baseline) with tape `b` (e.g. a fresh replay run). */
 export function diffTapes(a: Tape, b: Tape, options: DiffOptions = {}): TapeDiff {
   const ignored = new Set(options.ignoreTypes ?? []);
+  // Paths saved on the baseline tape at record time always apply.
+  const ignorePath = pathMatcher([...(a.metadata.ignorePaths ?? []), ...(options.ignorePaths ?? [])]);
+  const compare = (x: Json | undefined, y: Json | undefined) => deepDiff(x, y).filter((c) => !ignorePath(c.path));
   const keep = (e: TapeEvent) => !ignored.has(e.type);
 
   const steps: DiffStep[] = align(a.events.filter(keep), b.events.filter(keep)).map(([ea, eb], index) => {
     const key = alignmentKey((ea ?? eb)!);
     if (!ea) return { index, status: 'added', key, b: eb, changes: [] };
     if (!eb) return { index, status: 'removed', key, a: ea, changes: [] };
-    const changes = deepDiff(payload(ea), payload(eb));
+    const changes = compare(payload(ea), payload(eb));
     return { index, status: changes.length ? 'changed' : 'match', key, a: ea, b: eb, changes };
   });
 
-  const outcomeChanges = options.ignoreOutcome ? [] : deepDiff(...outcomePayloads(a.outcome, b.outcome));
+  const outcomeChanges = options.ignoreOutcome ? [] : compare(...outcomePayloads(a.outcome, b.outcome));
   const outcome: OutcomeDiff = { status: outcomeChanges.length ? 'changed' : 'match', changes: outcomeChanges };
 
   const count = (status: StepStatus) => steps.filter((s) => s.status === status).length;

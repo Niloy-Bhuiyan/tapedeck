@@ -1,4 +1,4 @@
-import { deepDiff, describeChange } from '../diff/deep.js';
+import { deepDiff, describeChange, pathMatcher } from '../diff/deep.js';
 import { deserializeError, shortHash, toJson } from '../tape/json.js';
 import { TapeRecorder } from '../tape/recorder.js';
 import { compilePatterns, DEFAULT_SECRET_PATTERNS, redactJson } from '../tape/redact.js';
@@ -40,6 +40,8 @@ export interface ReplaySessionOptions {
    * compared with the (already redacted) tape.
    */
   redact?: string[];
+  /** Request/argument paths to ignore when matching calls (see pathMatcher). */
+  ignorePaths?: string[];
 }
 
 /** Thrown into the replayed code when it departs from the tape. */
@@ -98,6 +100,7 @@ export class ReplaySession implements Session {
   private readonly fallbackRandom: () => number;
   private readonly redactSources: string[];
   private readonly patterns: RegExp[];
+  private readonly ignorePath: (path: string) => boolean;
 
   constructor(
     readonly source: Tape,
@@ -114,6 +117,7 @@ export class ReplaySession implements Session {
     this.lastClock = Date.parse(source.createdAt);
     this.redactSources = [...new Set([...(source.metadata.redact ?? []), ...(options.redact ?? [])])];
     this.patterns = [...DEFAULT_SECRET_PATTERNS, ...compilePatterns(this.redactSources)];
+    this.ignorePath = pathMatcher([...(source.metadata.ignorePaths ?? []), ...(options.ignorePaths ?? [])]);
     this.fallbackRandom = seededRandom(parseInt(shortHash(source.id), 16));
   }
 
@@ -150,7 +154,7 @@ export class ReplaySession implements Session {
     const changes = deepDiff(
       { provider: expected.provider, operation: expected.operation, request: expected.request },
       { provider: call.provider, operation: call.operation, request },
-    );
+    ).filter((c) => !this.ignorePath(c.path));
     if (changes.length > 0) {
       this.diverge({
         kind: 'mismatched_call',
@@ -192,7 +196,9 @@ export class ReplaySession implements Session {
       return executeTool(this.recorder, call, invoke, codec);
     }
 
-    const changes = deepDiff({ tool: expected.tool, args: expected.args }, { tool: name, args: jsonArgs });
+    const changes = deepDiff({ tool: expected.tool, args: expected.args }, { tool: name, args: jsonArgs }).filter(
+      (c) => !this.ignorePath(c.path),
+    );
     if (changes.length > 0) {
       this.diverge({
         kind: 'mismatched_call',

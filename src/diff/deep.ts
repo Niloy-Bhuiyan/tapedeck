@@ -64,3 +64,29 @@ export function describeChange(change: FieldChange): string {
       return `${where}: ${preview(change.a)} → ${preview(change.b)}`;
   }
 }
+
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * Builds a predicate for ignore patterns over change paths. Patterns use the
+ * same syntax as the paths themselves, plus wildcards: `*` matches one key,
+ * `[*]` any array index, `**` any depth. A pattern also covers everything
+ * below it: `request.metadata` ignores `request.metadata.trace_id`.
+ *
+ * @example pathMatcher(['request.messages[*].name', '**.trace_id'])
+ */
+export function pathMatcher(patterns: readonly string[]): (path: string) => boolean {
+  const regexes = patterns.map((pattern) => {
+    const body = pattern
+      .split(/(\*\*|\[\*\]|\*)/)
+      .map((part) => {
+        if (part === '**') return '.*';
+        if (part === '[*]') return '\\[\\d+\\]';
+        if (part === '*') return '[^.[]+';
+        return escapeRegExp(part);
+      })
+      .join('');
+    return new RegExp(`^${body}(?:$|[.[])`);
+  });
+  return (path) => regexes.some((regex) => regex.test(path));
+}

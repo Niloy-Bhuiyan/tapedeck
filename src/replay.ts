@@ -50,7 +50,9 @@ export async function replay<T>(
 ): Promise<ReplayResult<T>> {
   installGlobals();
   const expected = typeof tape === 'string' ? readTapeFile(tape) : tape;
-  const session = new ReplaySession(expected, { ...options, redact: patternSources(options.redact) });
+  // One ignore list for both call matching and the final diff.
+  const ignorePaths = [...(options.ignorePaths ?? []), ...(options.diff?.ignorePaths ?? [])];
+  const session = new ReplaySession(expected, { ...options, redact: patternSources(options.redact), ignorePaths });
 
   let outcome: TapeOutcome;
   let returned: { result: T } | { error: unknown };
@@ -65,6 +67,6 @@ export async function replay<T>(
 
   const divergences = session.finish();
   const actual = session.toTape(outcome);
-  const diff = diffTapes(expected, actual, options.diff);
+  const diff = diffTapes(expected, actual, { ...options.diff, ignorePaths });
   return { ok: divergences.length === 0 && diff.equal, ...returned, divergences, expected, actual, diff };
 }
