@@ -34,6 +34,15 @@ export {
   type ReplayCommandOptions,
 } from './process.js';
 
+export {
+  findTapes,
+  githubAnnotations,
+  markdownSummary,
+  runTapeTests,
+  type TapeTestOptions,
+  type TapeTestResult,
+  type TapeTestStatus,
+} from './cli/test-runner.js';
 export { tool } from './interceptors/tool.js';
 export {
   LLM_HOSTS,
@@ -47,6 +56,8 @@ export { ANTHROPIC_OPERATIONS, OPENAI_OPERATIONS, wrapAnthropic, wrapOpenAI } fr
 
 export { formatForPath, parseTape, readTapeFile, serializeTape, writeTapeFile, type TapeFileFormat } from './tape/io.js';
 export { TapeFormatError, validateTape } from './tape/validate.js';
+export { DEFAULT_SECRET_PATTERNS, REDACTED, redactJson } from './tape/redact.js';
+export { pathMatcher } from './diff/deep.js';
 export * from './tape/schema.js';
 
 // MOCK: deterministic offline providers, see MOCKED_COMPONENTS.md.
