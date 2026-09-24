@@ -1,4 +1,14 @@
-import { currentSession, runtime } from './context.js';
+import { calledFromApp } from './caller.js';
+import { currentSession, runtime, type Session } from './context.js';
+
+/**
+ * The session that should see a clock read or random draw: the current one,
+ * provided the read comes from application code (see calledFromApp).
+ */
+function sessionForGlobals(): Session | null {
+  const session = currentSession();
+  return session && calledFromApp() ? session : null;
+}
 
 /**
  * Replaces `Date` and `Math.random` with thin wrappers that consult the
@@ -17,11 +27,11 @@ export function installGlobals(): void {
   function TapeDate(this: unknown, ...args: unknown[]): unknown {
     if (!new.target) {
       // Called as a function: returns the current time as a string.
-      const session = currentSession();
+      const session = sessionForGlobals();
       return session ? new OriginalDate(session.now('Date()')).toString() : OriginalDate();
     }
     if (args.length === 0) {
-      const session = currentSession();
+      const session = sessionForGlobals();
       if (session) return Reflect.construct(OriginalDate, [session.now('new Date')], new.target);
     }
     // Passing new.target keeps `class X extends Date` working after patching.
@@ -36,7 +46,7 @@ export function installGlobals(): void {
   Object.defineProperty(TapeDate, 'length', { value: OriginalDate.length });
   Object.defineProperty(TapeDate, 'now', {
     value: function now(): number {
-      const session = currentSession();
+      const session = sessionForGlobals();
       return session ? session.now('Date.now') : OriginalDate.now();
     },
     writable: true,
@@ -45,7 +55,7 @@ export function installGlobals(): void {
 
   globalThis.Date = TapeDate as unknown as DateConstructor;
   Math.random = function random(): number {
-    const session = currentSession();
+    const session = sessionForGlobals();
     return session ? session.random() : originalRandom();
   };
   runtime.installed = true;

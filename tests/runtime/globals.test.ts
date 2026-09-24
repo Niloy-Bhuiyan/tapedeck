@@ -99,3 +99,32 @@ describe('patched globals', () => {
     installGlobals();
   });
 });
+
+describe('which reads are captured', () => {
+  beforeAll(installGlobals);
+
+  it('ignores clock reads and random draws made inside node_modules', async () => {
+    const { mkdirSync, mkdtempSync, writeFileSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const { pathToFileURL } = await import('node:url');
+    const dir = join(mkdtempSync(join(tmpdir(), 'tapedeck-caller-')), 'node_modules', 'some-lib');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'index.mjs'), 'export const stamp = () => [Date.now(), Math.random()];\n');
+    const lib = (await import(pathToFileURL(join(dir, 'index.mjs')).href)) as { stamp: () => number[] };
+
+    const reads: string[] = [];
+    const session: Session = {
+      mode: 'record',
+      now: (source) => (reads.push(source), 1),
+      random: () => (reads.push('random'), 0.5),
+      llm: async () => null,
+      tool: async () => null,
+    };
+    runInSession(session, () => {
+      lib.stamp(); // library-internal: runs for real, not recorded
+      Date.now(); // application code: recorded
+    });
+    expect(reads).toEqual(['Date.now']);
+  });
+});
