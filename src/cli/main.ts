@@ -55,6 +55,9 @@ Options:
                           e.g. localhost:11434 for Ollama
       --http-host <host>  Record calls to this non-LLM host as tools (repeatable),
                           e.g. api.tavily.com
+      --ignore-path <p>   Ignore this field when matching and diffing (repeatable),
+                          e.g. request.metadata.trace_id or request.messages[*].name.
+                          Given to record, it is saved on the tape.
       --redact <regex>    Also scrub matches of this pattern from tapes (repeatable).
                           API keys and tokens are always scrubbed.
       --json              Print machine-readable JSON instead of text
@@ -84,9 +87,15 @@ const HOST_OPTIONS = {
   'llm-host': { type: 'string', multiple: true },
   'http-host': { type: 'string', multiple: true },
   redact: { type: 'string', multiple: true },
+  'ignore-path': { type: 'string', multiple: true },
 } as const;
 
-function hostOptions(values: { 'llm-host'?: string[]; 'http-host'?: string[]; redact?: string[] }) {
+function hostOptions(values: {
+  'llm-host'?: string[];
+  'http-host'?: string[];
+  redact?: string[];
+  'ignore-path'?: string[];
+}) {
   for (const pattern of values.redact ?? []) {
     try {
       new RegExp(pattern);
@@ -98,7 +107,13 @@ function hostOptions(values: { 'llm-host'?: string[]; 'http-host'?: string[]; re
     ...(values['llm-host']?.length ? { llmHosts: values['llm-host'] } : {}),
     ...(values['http-host']?.length ? { httpHosts: values['http-host'] } : {}),
     ...(values.redact?.length ? { redact: values.redact } : {}),
+    ...(values['ignore-path']?.length ? { ignorePaths: values['ignore-path'] } : {}),
   };
+}
+
+/** Diff options from --ignore and --ignore-path. */
+function diffOptions(values: { ignore?: string; 'ignore-path'?: string[] }): DiffOptions {
+  return { ...parseIgnore(values.ignore), ...(values['ignore-path']?.length ? { ignorePaths: values['ignore-path'] } : {}) };
 }
 
 function slug(text: string): string {
@@ -161,7 +176,7 @@ async function replayCmd(argv: string[], io: CliIO): Promise<number> {
     tape: tapePath,
     mode: values.strict ? 'strict' : 'diff',
     passthrough: values.passthrough,
-    diff: parseIgnore(values.ignore),
+    diff: diffOptions(values),
     ...(values.output ? { output: values.output } : {}),
     ...hostOptions(values),
   });
@@ -187,10 +202,14 @@ function diffCmd(argv: string[], io: CliIO): number {
   const { values, positionals } = parseArgs({
     args: argv,
     allowPositionals: true,
-    options: { ignore: { type: 'string' }, json: { type: 'boolean', default: false } },
+    options: {
+      ignore: { type: 'string' },
+      'ignore-path': { type: 'string', multiple: true },
+      json: { type: 'boolean', default: false },
+    },
   });
   if (positionals.length !== 2) throw new UsageError('diff: expected two tape files');
-  const diff = diffTapes(readTapeFile(positionals[0]!), readTapeFile(positionals[1]!), parseIgnore(values.ignore));
+  const diff = diffTapes(readTapeFile(positionals[0]!), readTapeFile(positionals[1]!), diffOptions(values));
   io.stdout(values.json ? `${JSON.stringify(diff, null, 2)}\n` : `${formatDiff(diff, { color: io.color })}\n`);
   return diff.equal ? 0 : 1;
 }
@@ -248,6 +267,7 @@ async function testCmd(argv: string[], io: CliIO): Promise<number> {
       'report-dir': { type: 'string' },
       markdown: { type: 'string' },
       ignore: { type: 'string' },
+      'ignore-path': { type: 'string', multiple: true },
       json: { type: 'boolean', default: false },
     },
   });
@@ -260,7 +280,7 @@ async function testCmd(argv: string[], io: CliIO): Promise<number> {
 
   const results = await runTapeTests(paths, {
     update: values.update,
-    diff: parseIgnore(values.ignore),
+    diff: diffOptions(values),
     ...(values['report-dir'] ? { reportDir: values['report-dir'] } : {}),
     ...(values.json ? {} : { onResult: (r: TapeTestResult) => io.stdout(testLine(r, io)) }),
   });

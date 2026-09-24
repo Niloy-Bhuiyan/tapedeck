@@ -36,6 +36,8 @@ export interface RunOptions {
   httpHosts?: string[];
   /** Extra redaction patterns (regex sources), on top of the built-in secret patterns. */
   redact?: string[];
+  /** Field paths to ignore when matching and diffing (saved on the tape when recording). */
+  ignorePaths?: string[];
 }
 
 export class NotInstrumentedError extends Error {
@@ -65,6 +67,7 @@ function runCommand(command: string, env: Record<string, string>, options: RunOp
     ...(options.llmHosts?.length ? { [ENV.llmHosts]: options.llmHosts.join(',') } : {}),
     ...(options.httpHosts?.length ? { [ENV.httpHosts]: options.httpHosts.join(',') } : {}),
     ...(options.redact?.length ? { [ENV.redact]: JSON.stringify(options.redact) } : {}),
+    ...(options.ignorePaths?.length ? { [ENV.ignorePaths]: JSON.stringify(options.ignorePaths) } : {}),
   };
   const nodeOptions = [process.env.NODE_OPTIONS, preloadFlags()].filter(Boolean).join(' ');
   return new Promise((resolvePromise, reject) => {
@@ -165,6 +168,7 @@ export async function replayCommand(command: string, options: ReplayCommandOptio
     },
     {
       ...options,
+      ignorePaths: [...(options.ignorePaths ?? []), ...(options.diff?.ignorePaths ?? [])],
       llmHosts: options.llmHosts ?? expected.metadata.llmHosts ?? [],
       httpHosts: options.httpHosts ?? expected.metadata.httpHosts ?? [],
     },
@@ -173,6 +177,9 @@ export async function replayCommand(command: string, options: ReplayCommandOptio
 
   const actual = readTapeFile(output);
   const divergences = actual.metadata.replay?.divergences ?? [];
-  const diff = diffTapes(expected, actual, options.diff);
+  const diff = diffTapes(expected, actual, {
+    ...options.diff,
+    ignorePaths: [...(options.ignorePaths ?? []), ...(options.diff?.ignorePaths ?? [])],
+  });
   return { ...run, ok: divergences.length === 0 && diff.equal, expected, actual, diff, divergences };
 }

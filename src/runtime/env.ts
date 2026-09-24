@@ -32,13 +32,15 @@ export const ENV = {
   httpHosts: 'TAPEDECK_HTTP_HOSTS',
   /** JSON array of extra redaction patterns (regex sources). */
   redact: 'TAPEDECK_REDACT',
+  /** JSON array of field paths to ignore when matching and diffing. */
+  ignorePaths: 'TAPEDECK_IGNORE_PATHS',
 } as const;
 
-function parseRedact(value: string | undefined): string[] {
+function parseList(name: string, value: string | undefined): string[] {
   if (!value) return [];
   const parsed: unknown = JSON.parse(value);
   if (!Array.isArray(parsed) || !parsed.every((p) => typeof p === 'string')) {
-    throw new Error(`${ENV.redact} must be a JSON array of strings`);
+    throw new Error(`${name} must be a JSON array of strings`);
   }
   return parsed;
 }
@@ -92,7 +94,8 @@ export function activateFromEnv(env: NodeJS.ProcessEnv = process.env): boolean {
   installFetchInterceptor();
 
   if (mode === 'record') {
-    const session = new RecordSession({ redact: parseRedact(settings.redact) });
+    const session = new RecordSession({ redact: parseList(ENV.redact, settings.redact) });
+    const ignorePaths = parseList(ENV.ignorePaths, settings.ignorePaths);
     runtime.globalSession = session;
     onExit((code) => {
       if (!shouldWrite(session, output)) return;
@@ -106,6 +109,7 @@ export function activateFromEnv(env: NodeJS.ProcessEnv = process.env): boolean {
             // Stored so a replay intercepts exactly the hosts that were recorded.
             ...(settings.llmHosts ? { llmHosts: settings.llmHosts.split(',') } : {}),
             ...(settings.httpHosts ? { httpHosts: settings.httpHosts.split(',') } : {}),
+            ...(ignorePaths.length ? { ignorePaths } : {}),
           },
           outcome: outcomeFor(code),
         }),
@@ -119,7 +123,8 @@ export function activateFromEnv(env: NodeJS.ProcessEnv = process.env): boolean {
     const session = new ReplaySession(readTapeFile(settings.tape), {
       mode: settings.replayMode === 'diff' ? 'diff' : 'strict',
       passthrough: settings.passthrough === '1',
-      redact: parseRedact(settings.redact),
+      redact: parseList(ENV.redact, settings.redact),
+      ignorePaths: parseList(ENV.ignorePaths, settings.ignorePaths),
     });
     runtime.globalSession = session;
     onExit((code) => {
