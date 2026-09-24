@@ -89,7 +89,13 @@ export function activateFromEnv(env: NodeJS.ProcessEnv = process.env): boolean {
         output,
         session.toTape({
           ...(settings.name ? { name: settings.name } : {}),
-          metadata: { ...defaultMetadata(), ...(settings.command ? { command: settings.command } : {}) },
+          metadata: {
+            ...defaultMetadata(),
+            ...(settings.command ? { command: settings.command } : {}),
+            // Stored so a replay intercepts exactly the hosts that were recorded.
+            ...(settings.llmHosts ? { llmHosts: settings.llmHosts.split(',') } : {}),
+            ...(settings.httpHosts ? { httpHosts: settings.httpHosts.split(',') } : {}),
+          },
           outcome: outcomeFor(code),
         }),
       );

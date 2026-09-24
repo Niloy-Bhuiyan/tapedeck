@@ -127,6 +127,10 @@ export interface TapeMetadata {
   command?: string;
   /** Node.js version used for the recording. */
   node?: string;
+  /** Extra hosts intercepted as LLM APIs during recording (`--llm-host`). */
+  llmHosts?: string[];
+  /** Non-LLM hosts recorded as http tools (`--http-host`). */
+  httpHosts?: string[];
   /** Set on tapes produced by a replay run. */
   replay?: ReplayMetadata;
   [key: string]: Json | ReplayMetadata | undefined;

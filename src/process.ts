@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { diffTapes, type DiffOptions, type TapeDiff } from './diff/diff.js';
 import { ENV } from './runtime/env.js';
 import type { ReplayMode } from './runtime/replay-session.js';
@@ -29,24 +30,45 @@ export interface RunOptions {
   /** `inherit` (default) streams the command's output; `pipe` captures it. */
   stdio?: 'inherit' | 'pipe';
   cwd?: string;
+  /** Extra hosts to treat as LLM APIs (e.g. `localhost:11434`). */
+  llmHosts?: string[];
+  /** Non-LLM hosts whose fetch calls are recorded as tools (e.g. a search API). */
+  httpHosts?: string[];
 }
 
 export class NotInstrumentedError extends Error {
   override name = 'NotInstrumentedError';
   constructor(command: string) {
     super(
-      `"${command}" exited without writing a tape. The program must import "tapedeck" ` +
-        '(e.g. to use wrapOpenAI/wrapAnthropic/tool) for its calls to be recorded or replayed.',
+      `"${command}" exited without writing a tape. TapeDeck attaches to Node.js programs: make sure ` +
+        'the command starts one (node, npx, npm run, tsx, …) and does not reset NODE_OPTIONS.',
     );
   }
 }
 
+/**
+ * `--import` flags that load TapeDeck into every Node process the command
+ * starts, before any application code. From a build this is dist/register.js;
+ * when running TapeDeck from source (development) it is the .ts file, loaded
+ * through tsx.
+ */
+export function preloadFlags(): string {
+  const built = new URL('./register.js', import.meta.url);
+  if (existsSync(fileURLToPath(built))) return `--import=${built.href}`;
+  return `--import=tsx --import=${new URL('./register.ts', import.meta.url).href}`;
+}
+
 function runCommand(command: string, env: Record<string, string>, options: RunOptions): Promise<CommandRun> {
+  const hosts = {
+    ...(options.llmHosts?.length ? { [ENV.llmHosts]: options.llmHosts.join(',') } : {}),
+    ...(options.httpHosts?.length ? { [ENV.httpHosts]: options.httpHosts.join(',') } : {}),
+  };
+  const nodeOptions = [process.env.NODE_OPTIONS, preloadFlags()].filter(Boolean).join(' ');
   return new Promise((resolvePromise, reject) => {
     const child = spawn(command, {
       shell: true,
       stdio: options.stdio === 'pipe' ? ['ignore', 'pipe', 'pipe'] : 'inherit',
-      env: { ...process.env, ...env },
+      env: { ...process.env, ...env, ...hosts, NODE_OPTIONS: nodeOptions },
       ...(options.cwd ? { cwd: options.cwd } : {}),
     });
     let stdout = '';
@@ -138,7 +160,11 @@ export async function replayCommand(command: string, options: ReplayCommandOptio
       [ENV.replayMode]: options.mode ?? 'diff',
       ...(options.passthrough ? { [ENV.passthrough]: '1' } : {}),
     },
-    options,
+    {
+      ...options,
+      llmHosts: options.llmHosts ?? expected.metadata.llmHosts ?? [],
+      httpHosts: options.httpHosts ?? expected.metadata.httpHosts ?? [],
+    },
   );
   if (!existsSync(output)) throw new NotInstrumentedError(command);
 
