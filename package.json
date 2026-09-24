@@ -63,7 +63,8 @@
     "example:replay": "tsx src/cli/bin.ts replay examples/research-agent/tapes/research-agent.tape.json --against \"node --import tsx examples/research-agent/main.ts\"",
     "example:regression": "tsx src/cli/bin.ts replay examples/research-agent/tapes/research-agent.tape.json --against \"node --import tsx examples/research-agent/main.ts --variant=v2\"",
     "prepublishOnly": "npm run typecheck && npm test && npm run build",
-    "prepare": "npm run build"
+    "prepare": "npm run build",
+    "example:zero-code": "tsx examples/zero-code/demo.ts"
   },
   "devDependencies": {
     "@anthropic-ai/sdk": "^0.128.0",
