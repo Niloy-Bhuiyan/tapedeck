@@ -23,5 +23,5 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
-      # The committed example tape must replay cleanly through the CLI too.
-      - run: npm run example:replay
+      # Dogfood: every committed tape must still replay cleanly through the CLI.
+      - run: npm run tapedeck -- test examples
