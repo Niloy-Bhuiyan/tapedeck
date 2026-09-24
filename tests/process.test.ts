@@ -57,8 +57,8 @@ describe('recordCommand / replayCommand', () => {
     expect(replayed.stderr).toContain('TapeDivergenceError');
   });
 
-  it('explains when the command never loads tapedeck', async () => {
-    const plain = quoteCommand([process.execPath, '-e', 'console.log(1)']);
+  it('explains when the command is not a Node.js program', async () => {
+    const plain = 'echo not-node';
     await expect(recordCommand(plain, { output: join(dir, 'none.tape.json'), stdio: 'pipe' })).rejects.toThrow(
       NotInstrumentedError,
     );
