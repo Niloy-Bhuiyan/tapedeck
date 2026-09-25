@@ -3,6 +3,15 @@ import type { Tape } from '../tape/schema.js';
 import { VERSION } from '../version.js';
 import { diffReportData, tapeReportData, type ReportData } from './data.js';
 
+const DARK_TOKENS = `
+    --bg: #151517; --panel: #1e1e21; --text: #ececee; --muted: #9a9aa2; --border: #303036;
+    --llm: #6ea2ff; --tool: #f0a73b; --clock: #9a9aa2; --random: #b294ff;
+    --ok: #4cc47f; --warn: #f0a73b; --bad: #ff6b60;
+    --ok-bg: #173323; --warn-bg: #3a2c12; --bad-bg: #3d1a18; --code-bg: #26262a;
+    color-scheme: dark;`;
+
+// Light by default, dark when the OS asks for it, and an explicit
+// data-theme="light"/"dark" on <html> (set by embedding viewers) wins both ways.
 const CSS = /* css */ `
 :root {
   --bg: #f7f7f5; --panel: #ffffff; --text: #1d1d1f; --muted: #6b6b70; --border: #e2e2e0;
@@ -12,13 +21,10 @@ const CSS = /* css */ `
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #151517; --panel: #1e1e21; --text: #ececee; --muted: #9a9aa2; --border: #303036;
-    --llm: #6ea2ff; --tool: #f0a73b; --clock: #9a9aa2; --random: #b294ff;
-    --ok: #4cc47f; --warn: #f0a73b; --bad: #ff6b60;
-    --ok-bg: #173323; --warn-bg: #3a2c12; --bad-bg: #3d1a18; --code-bg: #26262a;
-    color-scheme: dark;
+  :root:not([data-theme="light"]) {${DARK_TOKENS}
   }
+}
+:root[data-theme="dark"] {${DARK_TOKENS}
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text);
